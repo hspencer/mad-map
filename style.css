@@ -1,0 +1,36 @@
+@import url('https://fonts.googleapis.com/css2?family=Alegreya&display=swap');
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: "Alegreya Sans", serif;
+  }
+  svg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 100%;
+  }
+  .node {
+    stroke-width: 1.5px;
+  }
+  .link {
+    stroke: #0a0a0a;
+    stroke-opacity: 0.2;
+  }
+  .label {
+    text-anchor: middle;
+  }
+  .controls {
+    position: absolute;
+    bottom: 1em;
+    right: 1em;
+    background: rgba(255, 255, 255, 0.8);
+    z-index: 10;
+  }
+
+  .controls label{
+    display: block;
+    margin: 1ex 0;
+  }
