@@ -16,8 +16,7 @@ body {
     stroke-width: 1.5px;
   }
   .link {
-    stroke: #0a0a0a;
-    stroke-opacity: 0.2;
+    stroke-opacity: 0.1;
   }
   .label {
     text-anchor: middle;

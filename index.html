@@ -137,9 +137,9 @@
           .attr("r", (d) => Math.sqrt(d.count) * 5)
           .attr("fill", (d) => {
             // Colorear según la columna EAD
-            if (d.ead === "específica") return "#3f3f3f";
-            if (d.ead === "transversal") return "#070707";
-            if (d.ead === "central") return "#af2709de";
+            if (d.ead === "específica") return "#666";
+            if (d.ead === "transversal") return "#000";
+            if (d.ead === "central") return "#c00";
           });
 
         label = svg
@@ -157,9 +157,9 @@
           .attr("font-size", (d) => Math.sqrt(d.count) * 3 + 12 + "px")
           .style("fill", (d) => {
             // Colorear según la columna EAD
-            if (d.ead === "específica") return "#3f3f3f";
-            if (d.ead === "transversal") return "#070707";
-            if (d.ead === "central") return "#af2709de";
+            if (d.ead === "específica") return "#666";
+            if (d.ead === "transversal") return "#000";
+            if (d.ead === "central") return "#c00";
           });
 
         // Actualizar la simulación

@@ -11,6 +11,6 @@ Los datos están estructurados en una [planilla compartida](https://docs.google.
 
 1. La primera columna (Línea) nombra una línea de investigación y define un nodo del grafo
 2. La segunta columna (EAD) define si esa línea es específica a un área de investigación, es tranversal o central al programa. Los valores permitidos son: _específica_, _transversal_, _central_
-3. Desde la tercera columna (Relación N) se nombran las líneas relacionadas o dependientes. El conteo de relaciones (veces que una línea es referida) determinará el tamaño del nodo.
+3. Desde la tercera columna en adelante (Relación N) se nombran las líneas de investigación relacionadas o dependientes (necesarias para que la línea de invstigación exista). El conteo de relaciones (veces que una línea es referida desde la tercera columna en adelante) determinará el tamaño del nodo, en otras palabras de la línea de investigación. Este tamaño significa masa del nodo y tamaño tipográfico.
 
 **&rarr; [ver mapa](http://hspencer.github.io/mad-map)**
