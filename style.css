@@ -3,7 +3,7 @@
 body {
     margin: 0;
     padding: 0;
-    font-family: "Alegreya Sans", serif;
+    font-family: "Alegreya", serif;
   }
   svg {
     position: fixed;
@@ -23,13 +23,80 @@ body {
   }
   .controls {
     position: absolute;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: #0009;
+    font-size: 10px;
+    letter-spacing: 0.3ex;
     bottom: 1em;
-    right: 1em;
+    left: 1em;
     background: rgba(255, 255, 255, 0.8);
     z-index: 10;
+    width: 50%;
+    padding: 1em;
+    border-radius: .8ex;
   }
 
   .controls label{
     display: block;
+    vertical-align: middle;
     margin: 1ex 0;
   }
+
+/*********** Baseline, reset styles ***********/
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Removes default focus */
+input[type="range"]:focus {
+  outline: none;
+}
+
+/******** Chrome, Safari, Opera and Edge Chromium styles ********/
+/* slider track */
+input[type="range"]::-webkit-slider-runnable-track {
+  background-color: #5c5c5c;
+  height: 1px;
+}
+
+/* slider thumb */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  margin-top: -7.5px; /* Centers thumb on the track */
+  background-color: #808080;
+  border-radius: 50%;
+  height: 1rem;
+  width: 1rem;
+}
+
+input[type="range"]:focus::-webkit-slider-thumb {
+  outline: 3px solid #808080;
+  outline-offset: 0.125rem;
+}
+
+/*********** Firefox styles ***********/
+/* slider track */
+input[type="range"]::-moz-range-track {
+  background-color: #5c5c5c;
+  height: 1px;
+}
+
+/* slider thumb */
+input[type="range"]::-moz-range-thumb {
+  background-color: #808080;
+  border: none; /*Removes extra border that FF applies*/
+  height: 1rem;
+  width: 1rem;
+}
+
+input[type="range"]:focus::-moz-range-thumb{
+  outline: 3px solid #808080;
+  outline-offset: 0.125rem;
+}

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MAD - Líneas de Investigación</title>
     <script src="d3.v7.min.js"></script>
     <link rel="stylesheet" href="style.css" />
@@ -11,11 +12,11 @@
         <input type="checkbox" id="toggleLabels" /> Mostrar etiquetas
       </label>
       <label>
-        <input type="range" id="linkLength" min="10" max="600" value="61" />
+        <input type="range" id="linkLength" min="1" max="100" value="13" />
         Largo
       </label>
       <label>
-        <input type="range" id="linkStrength" min="0" max="1" step="0.01" value="0.07"
+        <input type="range" id="linkStrength" min="0" max=".45" step="0.001" value="0.01"
         />
         Fuerza
       </label>
@@ -134,10 +135,10 @@
           .data(nodes)
           .enter()
           .append("circle")
-          .attr("r", (d) => Math.sqrt(d.count) * 5)
+          .attr("r", (d) => Math.sqrt(d.count) * 4 + 4)
           .attr("fill", (d) => {
-            // Colorear según la columna EAD
-            if (d.ead === "específica") return "#666";
+            // color según la columna EAD
+            if (d.ead === "específica") return "#222";
             if (d.ead === "transversal") return "#000";
             if (d.ead === "central") return "#c00";
           });
@@ -154,10 +155,16 @@
           .attr("text-anchor", "middle")
           .attr("dy", ".35em")
           .attr("visibility", "hidden")
-          .attr("font-size", (d) => Math.sqrt(d.count) * 3 + 12 + "px")
+          .attr("font-size", (d) => Math.sqrt(d.count) * 3 + 14 + "px")
+          .style("font-weight", (d) => {
+            // peso según la columna EAD
+            if (d.ead === "específica") return "lighter";
+            if (d.ead === "transversal") return "bold";
+            if (d.ead === "central") return "normal";
+          })
           .style("fill", (d) => {
-            // Colorear según la columna EAD
-            if (d.ead === "específica") return "#666";
+            // color según la columna EAD
+            if (d.ead === "específica") return "#222";
             if (d.ead === "transversal") return "#000";
             if (d.ead === "central") return "#c00";
           });
@@ -213,11 +220,11 @@
           if (showLabels) {
             node.attr("r", 0);
             label.attr("visibility", "visible");
-            link.attr("stroke", "rgba(255, 255, 255, 0)");
+            link.attr("visibility", "hidden");
           } else {
-            node.attr("r", (d) => Math.sqrt(d.count) * 5);
+            node.attr("r", (d) => Math.sqrt(d.count) * 4 + 4);
             label.attr("visibility", "hidden");
-            link.attr("stroke", "#00000022");
+            link.attr("visibility", "visible");
           }
         });
 
@@ -225,16 +232,20 @@
         .getElementById("linkLength")
         .addEventListener("input", function () {
           linkLength = this.value;
-          simulation.force("link").distance((d) => linkLength ); // Actualizar la función distance
+          simulation.force("link").distance((d) => d.length * linkLength); 
           simulation.force("charge").strength(-linkLength);
           simulation.alpha(0.3).restart();
         });
+/*
 
+.distance((d) => d.length * linkLength) // Usar length como multiplicador
+              .strength(linkStrength)
+*/
       document
         .getElementById("linkStrength")
         .addEventListener("input", function () {
           linkStrength = this.value;
-          simulation.force("link").strength((d) => linkStrength * 3);
+          simulation.force("link").strength((d) => linkStrength);
           simulation.alpha(0.3).restart();
         });
     </script>
