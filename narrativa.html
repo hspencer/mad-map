@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Narrativa · Investigación e[ad]</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="d3.v7.min.js"></script>
+</head>
+<body>
+  <div class="surface">
+    <header class="topbar">
+      <a href="index.html" class="home">← Investigación e[ad]</a>
+      <div class="titulo">Narrativa</div>
+      <div class="audiencia">Evaluadores · CNA</div>
+      <div class="grow"></div>
+      <input type="search" id="search" placeholder="Buscar línea, sublínea o investigador…">
+    </header>
+
+    <aside class="controls">
+      <h3>Vistas</h3>
+      <button class="preset" data-preset="cobertura_por_linea">Cobertura por línea</button>
+      <button class="preset" data-preset="perfiles_por_area">Perfiles por área</button>
+
+      <h3>Envolventes</h3>
+      <label><input type="checkbox" data-toggle-envolvente="area" checked> Áreas del programa</label>
+      <label><input type="checkbox" data-toggle-envolvente="modo"> Modos de investigar</label>
+      <label><input type="checkbox" data-toggle-envolvente="salida"> Salidas</label>
+
+      <h3>Aristas</h3>
+      <label><input type="checkbox" data-toggle-edge="jerarquica" checked> Pertenencia a línea</label>
+      <label><input type="checkbox" data-toggle-edge="coautoria"> Coautoría (perfil → sublínea)</label>
+      <label><input type="checkbox" data-toggle-edge="coinvestigacion" checked> Coinvestigación</label>
+      <label><input type="checkbox" data-toggle-edge="sosten_lab"> Sostén por laboratorio</label>
+
+      <h3>Capa de perfiles</h3>
+      <label><input type="checkbox" data-toggle-perfiles> Mostrar investigadores</label>
+
+      <h3>Filtros</h3>
+      <div class="filter-group">
+        <small>Línea</small>
+        <select multiple size="4" data-filter="linea"></select>
+      </div>
+      <div class="filter-group">
+        <small>Área</small>
+        <select multiple size="3" data-filter="area"></select>
+      </div>
+      <div class="filter-group">
+        <small>Modo</small>
+        <select multiple size="3" data-filter="modo"></select>
+      </div>
+
+      <button class="clear" onclick="window.graph.clearFilters()">Limpiar todo</button>
+    </aside>
+
+    <main class="canvas">
+      <svg></svg>
+      <div class="tooltip"></div>
+      <div class="detail-panel"></div>
+      <div class="empty-state">
+        <div>Sin coincidencias.</div>
+        <button onclick="window.graph.clearFilters()">Limpiar filtros</button>
+      </div>
+      <div class="loading">
+        <div class="sello-loader" id="sello-loader">Cargando…</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="graph.js"></script>
+  <script>
+    const graph = new MadMapGraph({
+      surface: 'narrativa',
+      allowedEdges: ['jerarquica', 'coautoria', 'coinvestigacion', 'sosten_lab'],
+      defaultEdges: ['jerarquica', 'coinvestigacion'],
+      allowPerfiles: true,
+      defaultShowPerfiles: false,
+      defaultEnvolventes: ['area'],
+      allowedFilters: ['linea','area','modo'],
+    });
+    window.graph = graph;
+
+    fetch('mad-map-data.json').then(r => r.json()).then(d => {
+      if (d.sello && d.sello.texto) {
+        document.getElementById('sello-loader').textContent = d.sello.texto;
+      }
+    });
+
+    document.querySelectorAll('input[data-toggle-envolvente]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEnvolvente(el.dataset.toggleEnvolvente)));
+    document.querySelectorAll('input[data-toggle-edge]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEdge(el.dataset.toggleEdge)));
+    document.querySelector('input[data-toggle-perfiles]').addEventListener('change', () => graph.togglePerfiles());
+
+    document.querySelectorAll('select[data-filter]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const ids = Array.from(sel.selectedOptions).map(o => o.value);
+        graph.setFilter(sel.dataset.filter, ids);
+      });
+    });
+
+    document.querySelectorAll('button.preset').forEach(btn =>
+      btn.addEventListener('click', () => graph.applyPreset(btn.dataset.preset)));
+
+    document.getElementById('search').addEventListener('input', (e) => graph.setSearch(e.target.value));
+
+    graph.load('mad-map-data.json');
+  </script>
+</body>
+</html>

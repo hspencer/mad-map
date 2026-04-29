@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cartografía · Investigación e[ad]</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="d3.v7.min.js"></script>
+</head>
+<body>
+  <div class="surface">
+    <header class="topbar">
+      <a href="index.html" class="home">← Investigación e[ad]</a>
+      <div class="titulo">Cartografía</div>
+      <div class="audiencia">Postulantes</div>
+      <div class="grow"></div>
+      <input type="search" id="search" placeholder="Buscar línea o sublínea…">
+    </header>
+
+    <aside class="controls">
+      <h3>Envolventes</h3>
+      <label><input type="checkbox" data-toggle-envolvente="area" checked> Áreas del programa</label>
+      <label><input type="checkbox" data-toggle-envolvente="modo"> Modos de investigar</label>
+      <label><input type="checkbox" data-toggle-envolvente="salida"> Salidas (industria/academia/estado)</label>
+
+      <h3>Aristas</h3>
+      <label><input type="checkbox" data-toggle-edge="jerarquica" checked> Pertenencia a línea</label>
+      <label><input type="checkbox" data-toggle-edge="proximidad_semantica" checked> Proximidad temática</label>
+    </aside>
+
+    <main class="canvas">
+      <svg></svg>
+      <div class="tooltip"></div>
+      <div class="detail-panel"></div>
+      <div class="empty-state">
+        <div>Sin coincidencias para esta búsqueda.</div>
+        <button onclick="window.graph.clearFilters()">Limpiar</button>
+      </div>
+      <div class="loading">
+        <div class="sello-loader" id="sello-loader">Cargando el cuerpo investigativo del programa…</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="graph.js"></script>
+  <script>
+    const graph = new MadMapGraph({
+      surface: 'cartografia',
+      allowedEdges: ['jerarquica', 'proximidad_semantica'],
+      defaultEdges: ['jerarquica', 'proximidad_semantica'],
+      allowPerfiles: false,
+      defaultShowPerfiles: false,
+      defaultEnvolventes: ['area'],
+      allowedFilters: [],
+    });
+    window.graph = graph;
+
+    // Sello como mensaje de carga
+    fetch('mad-map-data.json').then(r => r.json()).then(d => {
+      if (d.sello && d.sello.texto) {
+        document.getElementById('sello-loader').textContent = d.sello.texto;
+      }
+    });
+
+    // Cablear controles
+    document.querySelectorAll('input[data-toggle-envolvente]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEnvolvente(el.dataset.toggleEnvolvente)));
+    document.querySelectorAll('input[data-toggle-edge]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEdge(el.dataset.toggleEdge)));
+    document.getElementById('search').addEventListener('input', (e) => graph.setSearch(e.target.value));
+
+    graph.load('mad-map-data.json');
+  </script>
+</body>
+</html>

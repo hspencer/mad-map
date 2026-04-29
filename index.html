@@ -1,253 +1,58 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MAD - Líneas de Investigación</title>
-    <script src="d3.v7.min.js"></script>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <div class="controls">
-      <label>
-        <input type="checkbox" id="toggleLabels" /> Mostrar etiquetas
-      </label>
-      <label>
-        <input type="range" id="linkLength" min="1" max="100" value="13" />
-        Largo
-      </label>
-      <label>
-        <input type="range" id="linkStrength" min="0" max=".45" step="0.001" value="0.01"
-        />
-        Fuerza
-      </label>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Investigación e[ad] · Doctorado en Arquitectura y Diseño</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="portada">
+    <div class="subtitulo">Doctorado en Arquitectura y Diseño · e[ad] PUCV</div>
+    <h1>Investigación e[ad]</h1>
+
+    <div class="sello" id="sello">
+      <span class="foco" id="sello-foco">Cargando…</span>
+      <p id="sello-texto">Cargando el sello formativo del programa.</p>
     </div>
-    <svg id="graph"></svg>
-    <script>
-      // Configuración inicial
-      var linkLength = document.getElementById("linkLength").value;
-      var linkStrength = document.getElementById("linkStrength").value;
-      var showLabels = false;
-      var simulation, link, node, label;
 
-      // Definir el tamaño y margen del SVG
-      const width = window.innerWidth,
-        height = window.innerHeight;
+    <div class="tarjetas">
+      <a class="tarjeta" href="cartografia.html">
+        <h2>Cartografía</h2>
+        <div class="audiencia">Pública · Postulantes</div>
+        <p>Mapa abierto del cuerpo investigativo: las cuatro líneas troncales, sus sublíneas y la proximidad temática que las vincula. Lectura limpia, sin perfiles individuales.</p>
+        <span class="ir">Entrar →</span>
+      </a>
 
-      // Seleccionar el SVG y asignarle dimensiones
-      const svg = d3
-        .select("#graph")
-        .attr("width", width)
-        .attr("height", height);
+      <a class="tarjeta" href="narrativa.html">
+        <h2>Narrativa</h2>
+        <div class="audiencia">Evaluadores · CNA</div>
+        <p>Vista curada del programa: cobertura por línea, perfiles que la sostienen, articulación con laboratorios. Pensada para mostrar la coherencia institucional.</p>
+        <span class="ir">Entrar →</span>
+      </a>
 
-      // Cargar datos desde el archivo CSV
-      d3.csv(
-        "https://docs.google.com/spreadsheets/d/e/2PACX-1vRcrfsdeArUHSpYd5J7Pby6nn2bZgwGTy8KBl5NPdTCNsvkBTXdI54amrC39Q3PQd0AAO6KY-lhcplr/pub?gid=1147217014&single=true&output=csv"
-      ).then(function (data) {
-        // Inicializar las variables nodes y links
-        let nodes = [];
-        let links = [];
-        let nodeMap = {};
+      <a class="tarjeta" href="exploracion.html">
+        <h2>Exploración</h2>
+        <div class="audiencia">Equipo · Profesores</div>
+        <p>Herramienta interna con todos los controles: filtros, toggles de aristas, selectores de proyección, vistas guardadas. Para descubrir relaciones y huecos del programa.</p>
+        <span class="ir">Entrar →</span>
+      </a>
+    </div>
+  </div>
 
-        // Mapa para mantener un registro del número de relaciones para cada línea
-        let relationCount = {};
-
-        // Paso 1: Inicializar todos los nodos con id y ead
-        data.forEach(function (row) {
-          if (!nodeMap[row.Línea]) {
-            nodeMap[row.Línea] = {
-              id: row.Línea,
-              count: 0, // Inicializado en 0
-              ead: row.EAD,
-            };
-          }
-        });
-
-        // Paso 2: Procesar las relaciones para construir los enlaces y actualizar los recuentos
-        data.forEach(function (row) {
-          // Inicializar el contador para la línea actual
-          relationCount[row.Línea] = 1;
-
-          Object.keys(row).forEach(function (column) {
-            if (column.startsWith("Relación") && row[column]) {
-              // Incrementar el contador para la línea actual
-              relationCount[row.Línea] += 1;
-
-              
-              // Asegurarse de que el nodo destino también esté inicializado
-              if (!nodeMap[row[column]]) {
-                nodeMap[row[column]] = { id: row[column], count: 0, ead: "no" };
-              }
-              
-
-              // Añadir el enlace solo si ambos nodos existen
-              if (nodeMap[row.Línea] && nodeMap[row[column]]) {
-                // Añadir la propiedad 'length' al enlace
-                links.push({
-                  source: row.Línea,
-                  target: row[column],
-                  length: relationCount[row.Línea],
-                });
-              }
-
-              // Incrementar el recuento para el nodo destino
-              nodeMap[row[column]].count += 1;
-            }
-          });
-        });
-
-        // Crear la lista de nodos a partir del mapa de nodos
-        nodes = Object.values(nodeMap);
-
-        console.log("nodes: ");
-        console.log(nodes);
-        console.log("links: ");
-        console.log(links);
-
-        // Crear la simulación usando D3 force
-        simulation = d3
-          .forceSimulation(nodes)
-          .force(
-            "link",
-            d3
-              .forceLink(links)
-              .id((d) => d.id)
-              .distance((d) => d.length * linkLength) // Usar length como multiplicador
-              .strength(linkStrength)
-    
-          )
-          .force("charge", d3.forceManyBody().strength(-linkLength))
-          .force("center", d3.forceCenter(width / 2, height / 2));
-
-        // Crear los elementos SVG para los nodos y las aristas
-        link = svg
-          .append("g")
-          .attr("class", "links")
-          .selectAll("line")
-          .data(links)
-          .enter()
-          .append("line")
-          .attr("stroke", "#00000022");
-
-        node = svg
-          .append("g")
-          .attr("class", "nodes")
-          .selectAll("circle")
-          .data(nodes)
-          .enter()
-          .append("circle")
-          .attr("r", (d) => Math.sqrt(d.count) * 4 + 4)
-          .attr("fill", (d) => {
-            // color según la columna EAD
-            if (d.ead === "específica") return "#222";
-            if (d.ead === "transversal") return "#e64d06";
-            if (d.ead === "central") return "#a92905";
-          });
-
-        label = svg
-          .append("g")
-          .attr("class", "labels")
-          .selectAll(".label")
-          .data(nodes)
-          .enter()
-          .append("text")
-          .attr("class", "label")
-          .text((d) => d.id)
-          .attr("text-anchor", "middle")
-          .attr("dy", ".35em")
-          .attr("visibility", "hidden")
-          .attr("font-size", (d) => Math.sqrt(d.count) * 3 + 14 + "px")
-          .style("font-weight", (d) => {
-            // peso según la columna EAD
-            if (d.ead === "específica") return "lighter";
-            if (d.ead === "transversal") return "bold";
-            if (d.ead === "central") return "normal";
-          })
-          .style("fill", (d) => {
-            // color según la columna EAD
-            if (d.ead === "específica") return "#222";
-            if (d.ead === "transversal") return "#000";
-            if (d.ead === "central") return "#c00";
-          });
-
-        // Actualizar la simulación
-        simulation.nodes(nodes);
-        simulation.force("link").links(links);
-
-        // Actualizar la posición de los nodos y aristas
-        simulation.on("tick", function () {
-          link
-            .attr("x1", (d) => d.source.x)
-            .attr("y1", (d) => d.source.y)
-            .attr("x2", (d) => d.target.x)
-            .attr("y2", (d) => d.target.y);
-
-          node
-            .attr("cx", (d) => d.x)
-            .attr("cy", (d) => d.y)
-            .call(
-              d3
-                .drag()
-                .on("start", dragStarted)
-                .on("drag", dragged)
-                .on("end", dragEnded)
-            );
-
-          label.attr("x", (d) => d.x).attr("y", (d) => d.y);
-        });
+  <script>
+    fetch('mad-map-data.json')
+      .then(r => r.json())
+      .then(d => {
+        if (d.sello) {
+          document.getElementById('sello-foco').textContent = d.sello.foco || '';
+          document.getElementById('sello-texto').textContent = d.sello.texto || '';
+        }
+      })
+      .catch(err => {
+        document.getElementById('sello-texto').textContent = 'No se pudo cargar el sello formativo. Verifica que mad-map-data.json esté disponible.';
+        console.error(err);
       });
-
-      // Control de arrastre
-      function dragStarted(event) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        event.subject.fx = event.subject.x;
-        event.subject.fy = event.subject.y;
-      }
-      function dragged(event) {
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-      }
-      function dragEnded(event) {
-        if (!event.active) simulation.alphaTarget(0);
-        event.subject.fx = null;
-        event.subject.fy = null;
-      }
-
-      // Controles interactivos
-      document
-        .getElementById("toggleLabels")
-        .addEventListener("change", function () {
-          showLabels = !showLabels;
-          if (showLabels) {
-            node.attr("r", 0);
-            label.attr("visibility", "visible");
-            link.attr("visibility", "hidden");
-          } else {
-            node.attr("r", (d) => Math.sqrt(d.count) * 4 + 4);
-            label.attr("visibility", "hidden");
-            link.attr("visibility", "visible");
-          }
-        });
-
-      document
-        .getElementById("linkLength")
-        .addEventListener("input", function () {
-          linkLength = this.value;
-          simulation.force("link").distance((d) => d.length * linkLength); 
-          simulation.force("charge").strength(-linkLength);
-          simulation.alpha(0.3).restart();
-        });
-/*
-
-.distance((d) => d.length * linkLength) // Usar length como multiplicador
-              .strength(linkStrength)
-*/
-      document
-        .getElementById("linkStrength")
-        .addEventListener("input", function () {
-          linkStrength = this.value;
-          simulation.force("link").strength((d) => linkStrength);
-          simulation.alpha(0.3).restart();
-        });
-    </script>
-  </body>
+  </script>
+</body>
 </html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exploración · Investigación e[ad]</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="d3.v7.min.js"></script>
+</head>
+<body>
+  <div class="surface">
+    <header class="topbar">
+      <a href="index.html" class="home">← Investigación e[ad]</a>
+      <div class="titulo">Exploración</div>
+      <div class="audiencia">Equipo</div>
+      <div class="grow"></div>
+      <input type="search" id="search" placeholder="Buscar cualquier nodo…">
+    </header>
+
+    <aside class="controls">
+      <h3>Envolventes</h3>
+      <label><input type="checkbox" data-toggle-envolvente="area" checked> Áreas</label>
+      <label><input type="checkbox" data-toggle-envolvente="modo"> Modos de investigar</label>
+      <label><input type="checkbox" data-toggle-envolvente="salida"> Salidas</label>
+
+      <h3>Aristas</h3>
+      <label><input type="checkbox" data-toggle-edge="jerarquica" checked> a · Jerárquica</label>
+      <label><input type="checkbox" data-toggle-edge="coautoria"> b · Coautoría</label>
+      <label><input type="checkbox" data-toggle-edge="coinvestigacion"> c · Coinvestigación</label>
+      <label><input type="checkbox" data-toggle-edge="sosten_lab"> d · Sostén por lab</label>
+      <label><input type="checkbox" data-toggle-edge="afinidad_lab"> e · Afinidad por lab</label>
+      <label><input type="checkbox" data-toggle-edge="coincidencia_modo"> f · Coincidencia de modo</label>
+      <label><input type="checkbox" data-toggle-edge="proximidad_semantica"> g · Proximidad semántica</label>
+
+      <h3>Capa de perfiles</h3>
+      <label><input type="checkbox" data-toggle-perfiles> Mostrar investigadores</label>
+
+      <h3>Filtros</h3>
+      <div class="filter-group">
+        <small>Línea</small>
+        <select multiple size="4" data-filter="linea"></select>
+      </div>
+      <div class="filter-group">
+        <small>Área</small>
+        <select multiple size="3" data-filter="area"></select>
+      </div>
+      <div class="filter-group">
+        <small>Modo</small>
+        <select multiple size="3" data-filter="modo"></select>
+      </div>
+      <div class="filter-group">
+        <small>Salida</small>
+        <select multiple size="3" data-filter="salida"></select>
+      </div>
+      <div class="filter-group">
+        <small>Laboratorio</small>
+        <select multiple size="5" data-filter="lab"></select>
+      </div>
+      <div class="filter-group">
+        <small>Investigador</small>
+        <select multiple size="6" data-filter="investigador"></select>
+      </div>
+
+      <h3>Proyección espacial</h3>
+      <label style="font-size:0.8rem; color:var(--muted)">
+        <em>Modelo IV (embedding) pendiente — iteración 1b. MVP usa force-directed.</em>
+      </label>
+      <div class="filter-group">
+        <small>Algoritmo (cuando llegue 1b)</small>
+        <select disabled>
+          <option>UMAP</option>
+          <option>PCA</option>
+          <option>t-SNE</option>
+        </select>
+      </div>
+
+      <button class="clear" onclick="window.graph.clearFilters()">Limpiar todo</button>
+    </aside>
+
+    <main class="canvas">
+      <svg></svg>
+      <div class="tooltip"></div>
+      <div class="detail-panel"></div>
+      <div class="empty-state">
+        <div>Sin coincidencias.</div>
+        <button onclick="window.graph.clearFilters()">Limpiar filtros</button>
+      </div>
+      <div class="loading">
+        <div class="sello-loader" id="sello-loader">Cargando…</div>
+      </div>
+    </main>
+  </div>
+
+  <script src="graph.js"></script>
+  <script>
+    const graph = new MadMapGraph({
+      surface: 'exploracion',
+      allowedEdges: ['jerarquica','coautoria','coinvestigacion','sosten_lab',
+                     'afinidad_lab','coincidencia_modo','proximidad_semantica'],
+      defaultEdges: ['jerarquica'],
+      allowPerfiles: true,
+      defaultShowPerfiles: false,
+      defaultEnvolventes: ['area'],
+      allowedFilters: ['linea','area','modo','salida','lab','investigador'],
+    });
+    window.graph = graph;
+
+    fetch('mad-map-data.json').then(r => r.json()).then(d => {
+      if (d.sello && d.sello.texto) {
+        document.getElementById('sello-loader').textContent = d.sello.texto;
+      }
+    });
+
+    document.querySelectorAll('input[data-toggle-envolvente]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEnvolvente(el.dataset.toggleEnvolvente)));
+    document.querySelectorAll('input[data-toggle-edge]').forEach(el =>
+      el.addEventListener('change', () => graph.toggleEdge(el.dataset.toggleEdge)));
+    document.querySelector('input[data-toggle-perfiles]').addEventListener('change', () => graph.togglePerfiles());
+
+    document.querySelectorAll('select[data-filter]').forEach(sel => {
+      sel.addEventListener('change', () => {
+        const ids = Array.from(sel.selectedOptions).map(o => o.value);
+        graph.setFilter(sel.dataset.filter, ids);
+      });
+    });
+
+    document.getElementById('search').addEventListener('input', (e) => graph.setSearch(e.target.value));
+
+    graph.load('mad-map-data.json');
+  </script>
+</body>
+</html>

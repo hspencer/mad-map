@@ -1,0 +1,673 @@
+-- allium: 3
+-- mad-map.allium
+--
+-- Scope: Visualización dinámica del cuerpo investigativo del Doctorado en
+--   Arquitectura y Diseño (e[ad] PUCV) sobre la base de mad-map-data-v2.xlsx.
+-- Includes:
+--   - Modelo de datos (Líneas, Sublíneas, Investigadores, Temas, Áreas,
+--     Modos, Salidas, Laboratorios y sus relaciones m:n; matriz de
+--     proximidad semántica declarada)
+--   - Tres superficies de visualización: cartografía pública, narrativa
+--     para evaluadores, y exploración interna
+--   - Una superficie de entrada (index) que enruta a las tres
+--   - Comportamiento del espacio semántico (Modelo IV: embedding semántico
+--     + proyección a 2D/3D)
+--   - Controles, filtros y persistencia de estado por superficie
+-- Excludes:
+--   - Pipeline de cómputo del embedding (caja negra, deferred)
+--   - Algoritmo concreto de proyección (caja negra, deferred)
+--   - Curaduría manual de la pestaña ProximidadSemantica
+--   - Mecanismo de publicación del .xlsx → JSON consumido por el frontend
+--   - Autenticación / control de acceso
+-- Dependencies: ninguna externa
+
+
+-- ====================================================================
+-- ACTORES Y ENTIDADES EXTERNAS
+-- ====================================================================
+
+external entity User {
+    -- Visitante anónimo. Distintas superficies tienen audiencias
+    -- distintas (público, evaluador CNA, equipo interno) pero el
+    -- spec no autentica: la elección de superficie es la que
+    -- modula qué se ve.
+}
+
+
+-- ====================================================================
+-- MODELO DE DATOS (cuerpo investigativo)
+-- ====================================================================
+
+entity Linea {
+    id: String
+    nombre: String
+    descripcion: String
+    embedding: EmbeddingVector
+}
+
+entity Sublinea {
+    id: String
+    nombre: String
+    descripcion: String
+    linea: Linea
+    area: Area
+    embedding: EmbeddingVector
+}
+
+entity Area {
+    codigo: String          -- ECH, EAA, FCT
+    nombre: String
+    descripcion: String
+}
+
+entity Modo {
+    id: String              -- MOD-01, MOD-02, MOD-03
+    nombre: String
+    descripcion: String
+}
+
+entity Salida {
+    id: String              -- SAL-IND, SAL-ACA, SAL-EST
+    nombre: String
+    descripcion: String
+}
+
+entity Laboratorio {
+    id: String
+    nombre: String
+    descripcion: String
+}
+
+entity Investigador {
+    id: String
+    nombre: String
+    area_principal: Area
+    perfil_url: String
+    embedding: EmbeddingVector
+}
+
+entity Tema {
+    id: String
+    investigador: Investigador
+    texto: String
+}
+
+
+-- ====================================================================
+-- RELACIONES m:n DEL MODELO DE DATOS
+-- ====================================================================
+
+entity SublineaTema {
+    sublinea: Sublinea
+    tema: Tema
+}
+
+entity LabLinea {
+    laboratorio: Laboratorio
+    linea: Linea
+}
+
+entity LabSalida {
+    laboratorio: Laboratorio
+    salida: Salida
+}
+
+entity InvestigadorLab {
+    investigador: Investigador
+    laboratorio: Laboratorio
+}
+
+entity InvestigadorModo {
+    investigador: Investigador
+    modo: Modo
+}
+
+entity LineaModo {
+    linea: Linea
+    modo: Modo
+    nivel: predominante | presente
+}
+
+
+-- ====================================================================
+-- PROXIMIDAD SEMÁNTICA DECLARADA
+-- ====================================================================
+
+entity ProximidadSemantica {
+    sublinea_a: Sublinea
+    sublinea_b: Sublinea
+    afinidad: Number        -- valor en 0..1
+    -- Pestaña 18_Proximidad_Tematica del .xlsx. Inferida inicialmente
+    -- desde nombres+descripciones, refinada manualmente por el equipo
+    -- del doctorado. Es la fuente de las aristas tipo (g).
+}
+
+invariant ProximidadSimetrica {
+    for p in ProximidadSemantica:
+        exists q in ProximidadSemantica
+            where q.sublinea_a = p.sublinea_b
+              and q.sublinea_b = p.sublinea_a
+              and q.afinidad = p.afinidad
+}
+
+invariant SublineaPerteneceAUnaLinea {
+    for s in Sublineas:
+        s.linea != null
+}
+
+
+-- ====================================================================
+-- ESPACIO SEMÁNTICO (MODELO IV)
+-- ====================================================================
+
+value EmbeddingVector {
+    components: List<Number>
+    -- Vector denso del embedding semántico de una entidad nodo.
+}
+
+value Position2D { x: Number, y: Number }
+value Position3D { x: Number, y: Number, z: Number }
+
+deferred SemanticEmbedding.compute
+    -- Pipeline offline. Considera (caja negra):
+    --   - Texto: nombre + descripción de la entidad
+    --   - Estructura: relaciones m:n del modelo
+    --   - Curaduría: matriz ProximidadSemantica una vez afinada
+    -- Se calcula una sola vez al construir el JSON consumido por las
+    -- páginas. El navegador no recalcula embeddings.
+
+deferred ProjectionAlgorithm.project
+    -- Recibe un EmbeddingVector y un número de dimensiones (2 ó 3),
+    -- devuelve Position2D o Position3D. Implementación delega a
+    -- PCA, UMAP o t-SNE según la elección activa en la superficie.
+
+
+-- ====================================================================
+-- ENTIDADES VISUALIZABLES (nodos, aristas, envolventes)
+-- ====================================================================
+
+entity Node {
+    id: String
+    nombre: String
+    embedding: EmbeddingVector
+    kind: linea_node | sublinea_node | investigador_node
+    -- Cualquier entidad cuya identidad puede aparecer como punto en
+    -- la visualización. La proyección concreta se computa en cada
+    -- carga de superficie.
+}
+
+entity Edge {
+    source: Node
+    target: Node
+    kind: jerarquica           -- (a) Sublinea -> Linea
+        | coautoria            -- (b) Investigador -> Sublinea (vía Tema)
+        | coinvestigacion      -- (c) Sublinea <-> Sublinea (perfiles compartidos)
+        | sosten_lab           -- (d) Laboratorio -> Linea
+        | afinidad_lab         -- (e) Sublinea <-> Sublinea (mismo Lab)
+        | coincidencia_modo    -- (f) Sublinea <-> Sublinea (mismo Modo)
+        | proximidad_semantica -- (g) Sublinea <-> Sublinea (declarada en ProximidadSemantica)
+}
+
+entity Envolvente {
+    kind: area | modo | salida
+    category_id: String
+    -- Región translúcida que rodea visualmente todos los nodos
+    -- visibles que pertenecen a la categoría dada. Si está activa
+    -- pero no hay nodos visibles de su categoría, no se renderiza.
+}
+
+
+-- ====================================================================
+-- CONFIGURACIÓN
+-- ====================================================================
+
+config {
+    -- Dimensiones por defecto al cargar cada superficie
+    cartografia_default_dimensions: two | three = two
+    narrativa_default_dimensions: two | three = two
+    exploracion_default_dimensions: two | three = two
+
+    -- Algoritmo de proyección
+    cartografia_projection: pca | umap | tsne = umap   -- fijo, no expuesto al usuario
+    narrativa_projection: pca | umap | tsne = umap     -- fijo, no expuesto al usuario
+    exploracion_default_projection: pca | umap | tsne = umap   -- editable
+
+    -- Métrica de tamaño de nodo
+    default_node_size_metric: relations | temas | perfiles = relations
+
+    -- Slider de fuerza de cluster en exploracion
+    default_cluster_strength: Number = 0.5
+}
+
+
+-- ====================================================================
+-- SUPERFICIES
+-- ====================================================================
+
+surface IndexLanding {
+    facing visitor: User
+
+    exposes:
+        for s in {Cartografia, Narrativa, Exploracion}:
+            s.title
+            s.description
+            s.audience
+        sello_formativo: String
+            -- Texto del sello (variante elegida en hoja 17_Sello del .xlsx)
+            -- mostrado como bajada identitaria del programa.
+
+    provides:
+        NavigateToCartografia()
+        NavigateToNarrativa()
+        NavigateToExploracion()
+
+    @guidance
+        -- Página de entrada. Tres tarjetas con el nombre, audiencia y
+        -- una pregunta orientadora por superficie. El sello formativo
+        -- aparece como encabezado.
+}
+
+surface Cartografia {
+    facing visitor: User
+
+    exposes:
+        for n in Nodes where n.kind in {linea_node, sublinea_node} and visible:
+            n.id
+            n.nombre
+            n.position
+        for e in Edges where e.kind in {jerarquica, proximidad_semantica} and visible:
+            e.source
+            e.target
+            e.kind
+        for env in Envolventes where active and has_visible_nodes:
+            env.kind
+            env.category_id
+        active_dimensions: two | three
+        active_envolventes: Set<area | modo | salida>
+        search_query: String?
+        selected_node: Node?
+
+    provides:
+        UserTogglesDimensions()
+        UserTogglesEnvolvente(kind: area | modo | salida)
+        UserTogglesEdge(kind: jerarquica | proximidad_semantica)
+        UserClicksNode(n: Node)
+        UserClicksOutsideNode()
+        UserClicksEnvolvente(env: Envolvente)
+        UserSearchesText(query: String)
+        UserClearsFilters()
+
+    @guarantee NoPerfiles
+        -- Esta superficie nunca expone investigadores como nodos,
+        -- independientemente del estado. La capa de perfiles no es
+        -- activable aquí (decisión de prudencia frente al público).
+
+    @guidance
+        -- Defaults al cargar:
+        --   active_dimensions = 2
+        --   edges visibles: jerarquica + proximidad_semantica (sólo (a) y (g))
+        --   envolventes activas: {area}
+        --   search_query = null
+        --   sin filtros
+        -- Sin selector de algoritmo; sin sliders; sin perfiles; sin
+        -- exportación; sin URL state. Cada visita parte limpia.
+}
+
+surface Narrativa {
+    facing visitor: User
+
+    exposes:
+        for n in Nodes where visible:
+            n.id
+            n.kind
+            n.nombre
+            n.position
+        for e in Edges where e.kind in {jerarquica, coinvestigacion, sosten_lab} and visible:
+            e.source
+            e.target
+            e.kind
+        for env in Envolventes where active and has_visible_nodes:
+            env.kind
+            env.category_id
+        active_dimensions: two | three
+        active_envolventes: Set<area | modo | salida>
+        active_edge_kinds: Set<jerarquica | coinvestigacion | sosten_lab>
+        show_perfiles: Boolean
+        filter_lineas: Set<Linea>
+        filter_areas: Set<Area>
+        filter_modos: Set<Modo>
+        active_preset: cobertura_por_linea | perfiles_por_area | none
+        search_query: String?
+        selected_node: Node?
+
+    provides:
+        UserTogglesDimensions()
+        UserTogglesEnvolvente(kind: area | modo | salida)
+        UserTogglesEdge(kind: jerarquica | coinvestigacion | sosten_lab)
+        UserTogglesPerfiles()
+        UserSelectsLineaFilter(linea: Linea)
+        UserSelectsAreaFilter(area: Area)
+        UserSelectsModoFilter(modo: Modo)
+        UserClicksPresetCoberturaPorLinea()
+        UserClicksPresetPerfilesPorArea()
+        UserClicksNode(n: Node)
+        UserClicksOutsideNode()
+        UserClicksEnvolvente(env: Envolvente)
+        UserSearchesText(query: String)
+        UserClearsFilters()
+
+    @guidance
+        -- Defaults al cargar:
+        --   active_dimensions = 2
+        --   active_edge_kinds = {jerarquica, coinvestigacion}
+        --   active_envolventes = {area}
+        --   show_perfiles = false
+        --   active_preset = none
+        --   sin filtros
+        -- Sin selector de algoritmo; sin sliders avanzados; sin URL state.
+        -- Dos presets accesibles como botones: "Cobertura por línea" y
+        -- "Perfiles por área".
+}
+
+surface Exploracion {
+    facing visitor: User
+
+    exposes:
+        for n in Nodes where visible:
+            n.id
+            n.kind
+            n.nombre
+            n.descripcion
+            n.position
+            n.size
+        for e in Edges where active_kind and visible:
+            e.source
+            e.target
+            e.kind
+        for env in Envolventes where active and has_visible_nodes:
+            env.kind
+            env.category_id
+        active_dimensions: two | three
+        active_projection: pca | umap | tsne
+        active_envolventes: Set<area | modo | salida>
+        active_edge_kinds: Set<jerarquica | coautoria | coinvestigacion |
+                                sosten_lab | afinidad_lab |
+                                coincidencia_modo | proximidad_semantica>
+        show_perfiles: Boolean
+        filter_lineas: Set<Linea>
+        filter_areas: Set<Area>
+        filter_modos: Set<Modo>
+        filter_salidas: Set<Salida>
+        filter_labs: Set<Laboratorio>
+        filter_investigadores: Set<Investigador>
+        cluster_strength: Number              -- 0..1
+        node_size_metric: relations | temas | perfiles
+        search_query: String?
+        selected_node: Node?
+        saved_views: List<SavedView>
+
+    provides:
+        UserTogglesDimensions()
+        UserSelectsProjection(p: pca | umap | tsne)
+        UserTogglesEnvolvente(kind: area | modo | salida)
+        UserTogglesEdge(kind: jerarquica | coautoria | coinvestigacion |
+                              sosten_lab | afinidad_lab |
+                              coincidencia_modo | proximidad_semantica)
+        UserTogglesPerfiles()
+        UserSelectsLineaFilter(linea: Linea)
+        UserSelectsAreaFilter(area: Area)
+        UserSelectsModoFilter(modo: Modo)
+        UserSelectsSalidaFilter(salida: Salida)
+        UserSelectsLabFilter(lab: Laboratorio)
+        UserSelectsInvestigadorFilter(inv: Investigador)
+        UserAdjustsClusterStrength(value: Number)
+        UserSelectsNodeSizeMetric(metric: relations | temas | perfiles)
+        UserClicksNode(n: Node)
+        UserClicksOutsideNode()
+        UserClicksEnvolvente(env: Envolvente)
+        UserSearchesText(query: String)
+        UserClearsFilters()
+        UserExportsView(format: svg | png | json)
+        UserSavesViewAsBookmark(name: String)
+        UserLoadsSavedView(view: SavedView)
+
+    @guidance
+        -- Defaults al cargar (cuando la URL no trae state params):
+        --   active_dimensions = 2, active_projection = umap
+        --   active_edge_kinds = {jerarquica}
+        --   active_envolventes = {area}
+        --   show_perfiles = false
+        --   node_size_metric = relations
+        --   cluster_strength = 0.5
+        -- Si la URL trae state params, se cargan en lugar de los defaults.
+        -- Estado completo serializable: filtros, toggles, algoritmo,
+        -- sliders, dimensiones, nodo seleccionado.
+}
+
+entity SavedView {
+    name: String
+    serialized_state: String
+    -- Snapshot de un estado de Exploracion guardado por el usuario.
+    -- Se almacena en localStorage; la URL es la fuente de verdad.
+}
+
+
+-- ====================================================================
+-- REGLAS DE COMPORTAMIENTO
+-- ====================================================================
+
+rule ProyectarPosicionAlCambiarVistaSemantica {
+    when: SurfaceLoad(any_surface)
+    let alg = case any_surface:
+        Cartografia => config.cartografia_projection
+        Narrativa => config.narrativa_projection
+        Exploracion => any_surface.active_projection
+    let dims = any_surface.active_dimensions
+    ensures:
+        for n in Nodes:
+            n.position = ProjectionAlgorithm.project(
+                vector: n.embedding,
+                algorithm: alg,
+                dimensions: dims
+            )
+}
+
+rule RecalcularProyeccionAlCambiarParametros {
+    when: ProjectionParametersChange(surface)
+    -- Cambian dimensions, projection o cluster_strength.
+    ensures:
+        for n in Nodes:
+            n.position = ProjectionAlgorithm.project(
+                vector: n.embedding,
+                algorithm: surface.active_projection,
+                dimensions: surface.active_dimensions
+            )
+}
+
+rule MostrarNodoPorFiltrosYBusqueda {
+    when: ViewStateChanges(surface)
+    let q = surface.search_query ?? ""
+    ensures:
+        for n in Nodes:
+            n.matches_filters = (
+                (surface.filter_lineas.empty
+                    or (n.kind = sublinea_node and n.linea in surface.filter_lineas)) and
+                (surface.filter_areas.empty
+                    or n.area in surface.filter_areas) and
+                (surface.filter_modos.empty
+                    or n.modos.any(m => m in surface.filter_modos)) and
+                (surface.filter_salidas.empty
+                    or n.salidas.any(s => s in surface.filter_salidas)) and
+                (surface.filter_labs.empty
+                    or n.labs.any(l => l in surface.filter_labs))
+            )
+            n.matches_search = (
+                q = "" or
+                n.nombre.lower.contains(q.lower) or
+                n.descripcion.lower.contains(q.lower)
+            )
+            n.layer_visible = (
+                n.kind != investigador_node or surface.show_perfiles
+            )
+            n.visible = n.matches_filters and n.layer_visible
+            n.highlighted = n.visible and n.matches_search and q != ""
+}
+
+rule MostrarAristaSegunTipoYNodos {
+    when: ViewStateChanges(surface)
+    ensures:
+        for e in Edges:
+            e.visible = (
+                e.kind in surface.active_edge_kinds and
+                e.source.visible and
+                e.target.visible
+            )
+}
+
+rule ClickEnvolventeFiltraPorCategoria {
+    when: UserClicksEnvolvente(env)
+    if env.kind = area:
+        ensures: surface.filter_areas = {env.category_id}
+    if env.kind = modo:
+        ensures: surface.filter_modos = {env.category_id}
+    if env.kind = salida:
+        ensures: surface.filter_salidas = {env.category_id}
+    @guidance
+        -- Atajo de exploración: clicking en una envolvente equivale a
+        -- "ver sólo esta categoría".
+}
+
+rule ClickFueraDeNodoCierraPanel {
+    when: UserClicksOutsideNode()
+    ensures: surface.selected_node = null
+}
+
+rule ClickNodoAbrePanel {
+    when: UserClicksNode(n)
+    ensures: surface.selected_node = n
+}
+
+rule SerializarEstadoEnURLSoloEnExploracion {
+    when: ViewStateChanges(surface)
+    requires: surface = Exploracion
+    ensures: BrowserURL.updated(serialized: serialize(surface.state))
+    @guidance
+        -- En Cartografia y Narrativa el estado NO se serializa.
+        -- Compartir URL = compartir vista exacta sólo en Exploracion.
+}
+
+rule CargarEstadoExploracionDesdeURL {
+    when: SurfaceLoad(Exploracion, url)
+    if url.has_state_params:
+        ensures: Exploracion.state = deserialize(url)
+    else:
+        ensures: Exploracion.state = exploracion_defaults()
+}
+
+rule MostrarSpinnerConSelloDuranteCarga {
+    when: SurfaceLoad(any_surface)
+    requires: dataset.not_loaded
+    ensures: LoadingState.created(
+        surface: any_surface,
+        message: dataset.sello_formativo
+    )
+    @guidance
+        -- El sello formativo (variante elegida en 17_Sello del .xlsx)
+        -- se muestra como mensaje de carga.
+}
+
+rule MostrarVacioCuandoFiltrosNoCoinciden {
+    when: ViewStateChanges(surface)
+    let visible_count = Nodes where n.visible.count
+    requires: visible_count = 0
+    ensures: EmptyState.created(
+        surface: surface,
+        message: "Sin coincidencias",
+        action: "Limpiar filtros"
+    )
+}
+
+rule AplicarPresetCoberturaPorLinea {
+    when: UserClicksPresetCoberturaPorLinea()
+    requires: surface = Narrativa
+    ensures: surface.active_envolventes = {area}
+    ensures: surface.active_edge_kinds = {jerarquica}
+    ensures: surface.show_perfiles = false
+    ensures: surface.active_preset = cobertura_por_linea
+    @guidance
+        -- Vista curada que destaca las 4 líneas troncales y sus
+        -- sublíneas como anclas. Las envolventes de área quedan como
+        -- contexto institucional.
+}
+
+rule AplicarPresetPerfilesPorArea {
+    when: UserClicksPresetPerfilesPorArea()
+    requires: surface = Narrativa
+    ensures: surface.active_envolventes = {area}
+    ensures: surface.active_edge_kinds = {jerarquica, coinvestigacion}
+    ensures: surface.show_perfiles = true
+    ensures: surface.active_preset = perfiles_por_area
+    @guidance
+        -- Vista curada que enciende los perfiles y los agrupa por
+        -- área principal. Útil para mostrar el cuerpo académico.
+}
+
+
+-- ====================================================================
+-- INVARIANTES GLOBALES
+-- ====================================================================
+
+invariant CadaNodoTieneEmbedding {
+    for n in Nodes:
+        n.embedding != null
+}
+
+invariant NodosVisiblesTienenPosicion {
+    for n in Nodes where visible:
+        n.position != null
+}
+
+invariant AristasVisiblesEntreNodosVisibles {
+    for e in Edges where visible:
+        e.source.visible and e.target.visible
+}
+
+invariant CartografiaSinPerfiles {
+    -- En la superficie pública nunca aparecen investigadores como
+    -- nodos, sin importar el estado de filtros.
+    for n in Cartografia.exposed_nodes:
+        n.kind != investigador_node
+}
+
+invariant CartografiaAristasLimitadas {
+    for e in Cartografia.exposed_edges:
+        e.kind in {jerarquica, proximidad_semantica}
+}
+
+invariant NarrativaAristasLimitadas {
+    for e in Narrativa.exposed_edges:
+        e.kind in {jerarquica, coinvestigacion, sosten_lab}
+}
+
+
+-- ====================================================================
+-- OPEN QUESTIONS
+-- ====================================================================
+
+open question
+    "¿La búsqueda debe buscar también en los Temas declarados (texto crudo) o sólo en nombre + descripción de las entidades nodo?"
+
+open question
+    "¿La pestaña ProximidadSemantica usa afinidad numérica (0..1) o sólo binaria (relacionado / no)? Decisión afecta cómo se incorpora al embedding."
+
+open question
+    "¿Las vistas guardadas en Exploracion son globales (compartidas entre todos los usuarios del equipo) o por usuario? Si son por usuario requiere autenticación, hoy fuera de scope."
+
+open question
+    "Cuando un nodo se atenúa por búsqueda no coincidente, ¿sus aristas se atenúan o desaparecen?"
+
+open question
+    "¿Hay un cuarto preset en Narrativa para 'huecos del programa' (sublíneas sin perfiles, perfiles sin sublíneas declaradas)?"
+
+open question
+    "¿Las dimensiones 2D/3D son toggle dentro de la misma página o una sub-ruta hermana? El spec asume toggle. Implementación puede confirmar."

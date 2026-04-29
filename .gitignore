@@ -1,0 +1,14 @@
+# Configuración local del editor / IDE
+.claude/
+.vscode/
+
+# Locks temporales de Excel/Numbers cuando el .xlsx está abierto
+~$*.xlsx
+~$*.xls
+
+# Python
+__pycache__/
+*.pyc
+
+# Sistema
+.DS_Store
