@@ -6,7 +6,7 @@ Mapa dinámico del cuerpo investigativo del **Doctorado en Arquitectura y Diseñ
 
 | | |
 |---|---|
-| **Visualización** | [[hspencer.github.io/mad-map](https://eadpucv.github.io/investigacion-ead/) |
+| **Visualización** | [eadpucv.github.io/investigacion-ead](https://eadpucv.github.io/investigacion-ead/) |
 | **Documento institucional** | [lineas-investigacion.md](./lineas-investigacion.md) |
 | **Planilla colaborativa** | [Google Sheet](https://docs.google.com/spreadsheets/d/1Vbua3waIfGyszVnu3vr6qv2KvwVqK1zIHnZIrIEaFzQ/edit) |
 
