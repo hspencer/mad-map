@@ -1,210 +1,100 @@
 # Investigación e[ad]
 
-Mapa dinámico del cuerpo investigativo del **Doctorado en Arquitectura y Diseño** de la e[ad] PUCV. Visualiza las cuatro líneas troncales del programa, sus sublíneas, y los profesores investigadores que las cultivan, con tres superficies pensadas para audiencias distintas.
+Mapa dinámico del cuerpo investigativo del **Doctorado en Arquitectura y Diseño** de la e[ad] PUCV. Las cuatro líneas troncales del programa, sus sublíneas y los profesores que las cultivan, en una visualización interactiva que se alimenta directamente de una planilla colaborativa.
 
-> **Sello formativo del programa**
->
-> *La obra como argumento.* El doctorado forma investigadores para quienes la obra es origen y prueba de la tesis. Esa obra, sea edificada, fabricada, escrita o dibujada, vale como argumento por sí misma. La pregunta que esa obra está llamada a argumentar: cómo reinventar el habitar humano.
+> *La obra como argumento.* El doctorado forma investigadores para quienes la obra es origen y prueba de la tesis. La pregunta que esa obra está llamada a argumentar: **cómo reinventar el habitar humano**.
 
-## Cómo correr el mapa
+| | |
+|---|---|
+| **Visualización** | [hspencer.github.io/mad-map](https://hspencer.github.io/mad-map/) |
+| **Documento institucional** | [lineas-investigacion.md](./lineas-investigacion.md) |
+| **Planilla colaborativa** | [Google Sheet](https://docs.google.com/spreadsheets/d/1Vbua3waIfGyszVnu3vr6qv2KvwVqK1zIHnZIrIEaFzQ/edit) |
 
-Por restricciones de CORS, las páginas necesitan servirse desde un servidor HTTP local (no abrir como `file://`).
+## Cómo funciona
 
-```bash
-cd /ruta/al/proyecto
-python3 -m http.server 8765
-# abrir http://localhost:8765/
+Los datos —líneas, sublíneas, investigadores, temas, áreas, modos, salidas, laboratorios y sus relaciones m:n— viven en una planilla compartida de Google Sheets. La visualización los carga **en vivo** mediante la API `gviz`. No hay paso intermedio de regeneración: la planilla es la fuente de verdad y cualquier edición se refleja en la visualización con sólo refrescar el navegador.
+
+```
+Google Sheet  ──gviz──►  data-loader.js  ──►  graph.js  ──►  superficies HTML
+   (editable)                (parser CSV +              (D3 force-directed)
+                              cómputo de aristas)
 ```
 
-La portada (`index.html`) muestra el sello formativo y enlaces a las tres superficies.
+Para actualizar la visualización:
 
----
+1. Editar cualquier pestaña en el [Google Sheet](https://docs.google.com/spreadsheets/d/1Vbua3waIfGyszVnu3vr6qv2KvwVqK1zIHnZIrIEaFzQ/edit).
+2. Refrescar la página de la visualización (la caché de `gviz` puede demorar hasta unos minutos).
 
 ## Las tres superficies
 
-Las tres consumen el mismo dataset (`mad-map-data.json`) y comparten el motor de visualización (`graph.js`), pero exponen controles, aristas y nodos distintos según su audiencia.
+Las tres páginas comparten el mismo motor (`graph.js`) pero exponen controles, aristas y nodos distintos según su audiencia:
 
-### 1. Cartografía (`cartografia.html`) — audiencia: postulantes
+- [**Cartografía**](https://hspencer.github.io/mad-map/cartografia.html) · *postulantes* — las 4 líneas y sus sublíneas como territorio temático, sin perfiles individuales.
+- [**Narrativa**](https://hspencer.github.io/mad-map/narrativa.html) · *evaluadores · CNA* — activa la capa de profesores y dos vistas predefinidas: *cobertura por línea* y *perfiles por área*.
+- [**Exploración**](https://hspencer.github.io/mad-map/exploracion.html) · *equipo del doctorado* — todos los controles: los siete tipos de aristas como toggles, filtros completos por línea/área/modo/salida/laboratorio/investigador, y búsqueda.
 
-Un mapa abierto de **lo que se investiga** en el programa. Sin perfiles individuales: el postulante ve el cuerpo de líneas y sublíneas como territorio temático, no como roster de profesores.
+Cada superficie tiene una columna lateral de controles y una zona principal con el grafo. Click en cualquier nodo abre el panel de detalle al lado derecho. Hover muestra tooltip con el nombre. Drag reposiciona temporalmente; soltarlo deja que las fuerzas reacomoden.
 
-**Qué se ve:**
-- **Nodos**: las 4 líneas troncales (rojo, mayor tamaño) y las ~30 sublíneas (gris).
-- **Aristas**:
-  - *Pertenencia a línea* — cada sublínea conectada a su línea madre (gris sólido).
-  - *Proximidad temática* — pares de sublíneas declarados como afines en la curaduría del programa (rojo translúcido).
-- **Envolventes** — regiones traslúcidas que rodean los nodos por su categoría:
-  - *Áreas del programa* (ECH, EAA, FCT) — encendida por defecto.
-  - *Modos de investigar* y *Salidas* — disponibles como capas adicionales.
+## Documento institucional
 
-**Cómo se interactúa:**
-- **Hover sobre nodo** — tooltip con el nombre.
-- **Click sobre nodo** — abre un panel lateral con la descripción, la línea madre y la lista de sublíneas/temas asociados.
-- **Click fuera de cualquier nodo** — cierra el panel.
-- **Drag de nodo** — arrastrar reposiciona; soltar reanima las fuerzas físicas.
-- **Scroll en el lienzo** — zoom (rueda del mouse o pinch en trackpad).
-- **Drag en lienzo vacío** — pan.
-- **Buscar** — el campo de la barra superior resalta nodos cuyo nombre o descripción contienen el texto, atenuando los demás.
-- **Toggles de envolvente / arista** — encender o apagar capas en la columna izquierda.
+[`lineas-investigacion.md`](./lineas-investigacion.md) describe formalmente cada línea: alcance temático, pregunta nuclear, cuerpo académico que la sostiene y argumentación de su consolidación y sostenibilidad. Pensado para audiencia institucional (CNA, comité doctoral, autoridades).
 
-**Lo que NO está disponible aquí:**
-- No hay capa de perfiles (decisión de prudencia frente al público).
-- No hay filtros, sliders ni selectores avanzados.
-- No hay persistencia de estado en URL (cada visita parte de los defaults).
+Para regenerarlo después de una edición significativa de la planilla:
 
-### 2. Narrativa (`narrativa.html`) — audiencia: evaluadores · CNA
+```bash
+python3 build_data.py     # snapshot Google Sheet → JSON local
+python3 build_doc.py      # JSON → lineas-investigacion.md
+```
 
-Vista curada que articula la **coherencia institucional**: cómo se distribuyen las líneas, qué laboratorios las sostienen, qué profesores las cultivan. Pensada para una lectura corta orientada a justificar el programa.
+(Sólo es necesario regenerar cuando cambia el cuerpo académico, las sublíneas o las descripciones de las líneas; no para cada edición menor del Sheet.)
 
-**Qué se ve además de cartografía:**
-- **Capa de perfiles** activable: 22 nodos investigadores (cuadrados grises) que se conectan a las sublíneas que cultivan.
-- **Aristas adicionales**:
-  - *Coautoría* — perfil → sublínea (vía temas declarados). Se enciende automáticamente al activar perfiles.
-  - *Coinvestigación* — pares de sublíneas que comparten profesores.
-  - *Sostén por laboratorio* — laboratorios → líneas que sostienen.
-- **Filtros multi-selección** — Línea, Área, Modo. Al seleccionar uno o varios valores, los nodos que no pertenecen quedan ocultos.
-- **Vistas predefinidas** — botones que aplican configuraciones curadas:
-  - *Cobertura por línea* — aristas jerárquicas, áreas como envolvente, sin perfiles. Foco: las 4 líneas troncales y sus sublíneas como anclas.
-  - *Perfiles por área* — perfiles encendidos, áreas como envolvente, coautoría visible. Foco: el cuerpo académico distribuido.
+## Especificación
 
-**Interacción adicional:**
-- **Click sobre perfil** — panel con el área principal, las sublíneas que cultiva y enlace al perfil Casiopea.
-- **Limpiar todo** — botón al pie de la barra lateral para resetear filtros y búsqueda.
+La especificación formal del comportamiento del sistema (entidades, superficies, reglas, invariantes) está en [`mad-map.allium`](./mad-map.allium), en formato Allium v3.
 
-**Lo que NO está disponible aquí:**
-- No hay selector de algoritmo de proyección.
-- No hay sliders ni controles avanzados.
-- No hay persistencia en URL (la vista parte limpia, los presets son la única forma de "guardar" una configuración).
+## Versiones
 
-### 3. Exploración (`exploracion.html`) — audiencia: equipo del doctorado
-
-Herramienta interna con **todos los controles** para descubrir relaciones latentes, huecos del programa y armar argumentos a partir del dato.
-
-**Qué se ve además de narrativa:**
-- **Las 7 aristas del modelo** disponibles como toggles independientes:
-  - *(a) Jerárquica* — Sublínea → Línea.
-  - *(b) Coautoría* — Investigador → Sublínea (vía Tema).
-  - *(c) Coinvestigación* — Sublínea ↔ Sublínea (perfiles compartidos).
-  - *(d) Sostén por laboratorio* — Laboratorio → Línea.
-  - *(e) Afinidad por laboratorio* — Sublíneas cuyas líneas-madre comparten Lab.
-  - *(f) Coincidencia de modo* — Sublíneas cuyas líneas-madre comparten modo predominante.
-  - *(g) Proximidad semántica* — pares declarados a mano en la pestaña 18 del .xlsx.
-- **Filtros completos** — además de Línea/Área/Modo: Salida, Laboratorio, Investigador.
-- **Selector de algoritmo de proyección** — UMAP / PCA / t-SNE (placeholder hoy; activo cuando llegue Modelo IV en iteración 1b. Por ahora todas las superficies usan force-directed).
-
-**Interacción adicional:**
-- Cada arista de tipo (a)…(g) tiene su propio toggle. Encender muchas a la vez satura el grafo: úsese con criterio.
-- Filtros se acumulan: seleccionar varios valores en un mismo facet hace OR; entre facets distintos hace AND.
-
-**Lo que faltará en iteraciones futuras:**
-- 3D toggle (placeholder hoy, requiere integración con three.js).
-- Persistencia del estado en URL (vista compartible por enlace).
-- Vistas guardadas en `localStorage`.
-- Exportación SVG/PNG/JSON.
-
----
-
-## Codificación visual común
-
-| Elemento | Forma | Color |
+| Branch | Modelo de datos | Estado |
 |---|---|---|
-| Línea troncal | Círculo grande | Rojo |
-| Sublínea | Círculo mediano | Gris oscuro |
-| Investigador | Cuadrado | Gris medio |
-| Arista jerárquica | Línea sólida | Gris oscuro |
-| Arista coautoría | Línea punteada fina | Gris |
-| Arista coinvestigación | Línea sólida fina | Azul |
-| Arista sostén lab | Línea segmentada | Verde |
-| Arista proximidad semántica | Línea sólida media | Rojo |
-| Envolvente Área ECH | Polígono translúcido | Azul |
-| Envolvente Área EAA | Polígono translúcido | Verde |
-| Envolvente Área FCT | Polígono translúcido | Magenta |
+| `main` | Google Sheets en vivo (`gviz`) | **Activa** |
+| `v2` | Pipeline Python local con snapshot `.xlsx` | Snapshot del mapa pre-Sheets |
+| `v1` | Mapa MAD legacy (Magíster) | Versión histórica con CSV publicado |
 
-Las envolventes son convex hulls de los nodos visibles que pertenecen a cada categoría. Si una categoría queda sin nodos visibles (filtro activo), su envolvente desaparece.
+Cualquiera puede consultarse con `git checkout v1` o `git checkout v2`.
 
----
-
-## Pipeline de datos
-
-El sistema tiene dos eslabones:
+## Estructura del proyecto
 
 ```
-build_xlsx.py  ──►  mad-map-data-v2.xlsx  ──►  build_data.py  ──►  mad-map-data.json  ──►  HTMLs
-   (script)         (planilla, 19 hojas)         (script)            (consumido en browser)
+.
+├── index.html                  ← portada con sello + 3 tarjetas
+├── cartografia.html            ← superficie pública (postulantes)
+├── narrativa.html              ← superficie evaluadores · CNA
+├── exploracion.html            ← superficie equipo del doctorado
+├── graph.js                    ← motor de visualización (D3 force-directed)
+├── data-loader.js              ← carga desde Google Sheets vía gviz
+├── style.css                   ← estilos compartidos
+├── d3.v7.min.js                ← biblioteca D3
+├── lineas-investigacion.md     ← documento institucional formal
+├── mad-map.allium              ← spec de comportamiento (Allium v3)
+├── mad-map-data.json           ← snapshot local (fallback offline)
+├── mad-map-data-v2.xlsx        ← snapshot local en formato xlsx
+├── build_data.py               ← (opcional) regenera JSON local desde xlsx
+├── build_doc.py                ← (opcional) regenera doc institucional
+├── build_xlsx.py               ← (opcional) inicializa estructura del .xlsx
+└── legacy.html                 ← visualización anterior del Magíster
 ```
 
-**Fuente de verdad:** `build_xlsx.py`. Este script contiene como literales Python todas las entidades del programa (líneas, sublíneas, áreas, modos, salidas, laboratorios, investigadores, temas), las relaciones m:n entre ellas, el sello formativo y la matriz de proximidad temática.
+## Modo offline
 
-### Flujo A — Modificar la estructura del programa (recomendado)
-
-Cuando se agregan/quitan/renombran líneas, sublíneas, profesores, temas, laboratorios, etc.
+Si la red falla o el Sheet no es accesible, la visualización cae automáticamente al snapshot local `mad-map-data.json`. Para refrescar el snapshot:
 
 ```bash
-# 1. Editar build_xlsx.py (sección que corresponda: LINEAS, SUBLINEAS, INVESTIGADORES, etc.)
-$EDITOR build_xlsx.py
-
-# 2. Regenerar la planilla desde el script
-python3 build_xlsx.py
-#   ↳ produce: mad-map-data-v2.xlsx (sobreescribe)
-
-# 3. Exportar el JSON consumido por las páginas
 python3 build_data.py
-#   ↳ produce: mad-map-data.json
-
-# 4. Refrescar el navegador (Cmd+Shift+R / Ctrl+Shift+R para vaciar cache)
 ```
 
-### Flujo B — Afinación manual del .xlsx
-
-Cuando se edita la planilla directamente en Excel/Numbers (por ejemplo, marcar un par de proximidad como `CONFIRMADO`, ajustar una afinidad).
-
-```bash
-# 1. Editar mad-map-data-v2.xlsx en Excel/Numbers, guardar y cerrar.
-
-# 2. Regenerar el JSON desde la planilla recién editada.
-python3 build_data.py
-
-# 3. Refrescar el navegador.
-```
-
-> ⚠️ **No correr `build_xlsx.py` después de ediciones manuales** — sobrescribe el .xlsx y pierde los cambios. Si quieres que esos ajustes sobrevivan a futuras regeneraciones, reflejarlos en las constantes `PROXIMIDAD_PARES` o `SELLO_VARIANTES` (u otras) dentro de `build_xlsx.py`.
-
-### Servidor local mientras se trabaja
-
-El navegador necesita un servidor HTTP para fetch del JSON (no funciona con `file://`). Mantener una pestaña con el server arriba mientras se itera:
+Para correr el sitio localmente:
 
 ```bash
 python3 -m http.server 8765
 # abrir http://localhost:8765/
 ```
-
-Tras correr `build_data.py`, basta refrescar la página.
-
-## Especificación
-
-El comportamiento del sistema está formalizado en `mad-map.allium` (formato Allium v3). El spec describe entidades, superficies, reglas de comportamiento e invariantes globales. Las decisiones de diseño quedaron registradas con sus alternativas en `sello.csv` (foco identitario) y en la pestaña `15_Decisiones` del .xlsx.
-
-## Estructura de archivos
-
-```
-.
-├── index.html              ← portada con sello + 3 tarjetas
-├── cartografia.html        ← superficie pública
-├── narrativa.html          ← superficie para evaluadores
-├── exploracion.html        ← superficie para el equipo del doctorado
-├── graph.js                ← motor de visualización (D3 force-directed)
-├── style.css               ← estilos compartidos
-├── d3.v7.min.js            ← biblioteca D3
-├── mad-map-data.json       ← datos consumidos por las páginas (generado)
-├── mad-map-data-v2.xlsx    ← fuente de datos (19 pestañas)
-├── build_xlsx.py           ← regenera el .xlsx desde scripts
-├── build_data.py           ← exporta xlsx → JSON
-├── mad-map.allium          ← spec de comportamiento (Allium v3)
-├── sello.csv               ← variantes del sello formativo
-├── lineas-areas-mad.csv    ← dataset legacy de la versión anterior
-└── legacy.html             ← visualización anterior (force-directed sobre el legacy CSV)
-```
-
-## Estado actual
-
-Versión MVP funcional con force-directed (Modelo I del spec). Pendiente migración a Modelo IV (posiciones derivadas de embedding semántico) en iteración 1b. Ver `mad-map.allium` para detalle de los pendientes y `15_Decisiones` para preguntas abiertas que afectan el modelo.
