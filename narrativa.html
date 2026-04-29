@@ -67,8 +67,12 @@
     </main>
   </div>
 
+  <script src="data-loader.js"></script>
   <script src="graph.js"></script>
   <script>
+    const SHEET_ID = '1Vbua3waIfGyszVnu3vr6qv2KvwVqK1zIHnZIrIEaFzQ';
+    const FALLBACK_JSON = 'mad-map-data.json';
+
     const graph = new MadMapGraph({
       surface: 'narrativa',
       allowedEdges: ['jerarquica', 'coautoria', 'coinvestigacion', 'sosten_lab'],
@@ -80,11 +84,11 @@
     });
     window.graph = graph;
 
-    fetch('mad-map-data.json').then(r => r.json()).then(d => {
+    fetch(FALLBACK_JSON).then(r => r.json()).then(d => {
       if (d.sello && d.sello.texto) {
         document.getElementById('sello-loader').textContent = d.sello.texto;
       }
-    });
+    }).catch(() => {});
 
     document.querySelectorAll('input[data-toggle-envolvente]').forEach(el =>
       el.addEventListener('change', () => graph.toggleEnvolvente(el.dataset.toggleEnvolvente)));
@@ -104,7 +108,7 @@
 
     document.getElementById('search').addEventListener('input', (e) => graph.setSearch(e.target.value));
 
-    graph.load('mad-map-data.json');
+    graph.loadFromSheets(SHEET_ID, FALLBACK_JSON);
   </script>
 </body>
 </html>

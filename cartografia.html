@@ -42,8 +42,12 @@
     </main>
   </div>
 
+  <script src="data-loader.js"></script>
   <script src="graph.js"></script>
   <script>
+    const SHEET_ID = '1Vbua3waIfGyszVnu3vr6qv2KvwVqK1zIHnZIrIEaFzQ';
+    const FALLBACK_JSON = 'mad-map-data.json';
+
     const graph = new MadMapGraph({
       surface: 'cartografia',
       allowedEdges: ['jerarquica', 'proximidad_semantica'],
@@ -55,12 +59,12 @@
     });
     window.graph = graph;
 
-    // Sello como mensaje de carga
-    fetch('mad-map-data.json').then(r => r.json()).then(d => {
+    // Sello como mensaje de carga (fetch fallback local mientras Sheets carga)
+    fetch(FALLBACK_JSON).then(r => r.json()).then(d => {
       if (d.sello && d.sello.texto) {
         document.getElementById('sello-loader').textContent = d.sello.texto;
       }
-    });
+    }).catch(() => {});
 
     // Cablear controles
     document.querySelectorAll('input[data-toggle-envolvente]').forEach(el =>
@@ -69,7 +73,7 @@
       el.addEventListener('change', () => graph.toggleEdge(el.dataset.toggleEdge)));
     document.getElementById('search').addEventListener('input', (e) => graph.setSearch(e.target.value));
 
-    graph.load('mad-map-data.json');
+    graph.loadFromSheets(SHEET_ID, FALLBACK_JSON);
   </script>
 </body>
 </html>

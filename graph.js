@@ -50,6 +50,28 @@ class MadMapGraph {
   async load(jsonUrl) {
     const res = await fetch(jsonUrl);
     this.data = await res.json();
+    this._initWithData();
+  }
+
+  // Modelo "Sheets-en-vivo": fetcha desde Google Sheets vía gviz.
+  // Si falla (sheet inaccesible, red caída), cae al JSON local si se provee.
+  async loadFromSheets(sheetId, fallbackJsonUrl) {
+    try {
+      this.data = await window.MadMapDataLoader.loadFromSheets(sheetId);
+    } catch (err) {
+      console.warn('[MadMap] fallo al leer Google Sheets:', err);
+      if (fallbackJsonUrl) {
+        console.warn('[MadMap] fallback a JSON local:', fallbackJsonUrl);
+        const res = await fetch(fallbackJsonUrl);
+        this.data = await res.json();
+      } else {
+        throw err;
+      }
+    }
+    this._initWithData();
+  }
+
+  _initWithData() {
     this._setupDOM();
     this._buildNodesAndEdges();
     this._renderControls();
