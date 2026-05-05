@@ -2,24 +2,41 @@
 -- mad-map.allium
 --
 -- Scope: Visualización dinámica del cuerpo investigativo del Doctorado en
---   Arquitectura y Diseño (e[ad] PUCV) sobre la base de mad-map-data-v2.xlsx.
+--   Arquitectura y Diseño (e[ad] PUCV), alimentada en vivo desde una
+--   planilla colaborativa de Google Sheets.
 -- Includes:
 --   - Modelo de datos (Líneas, Sublíneas, Investigadores, Temas, Áreas,
 --     Modos, Salidas, Laboratorios y sus relaciones m:n; matriz de
 --     proximidad semántica declarada)
---   - Tres superficies de visualización: cartografía pública, narrativa
---     para evaluadores, y exploración interna
---   - Una superficie de entrada (index) que enruta a las tres
---   - Comportamiento del espacio semántico (Modelo IV: embedding semántico
---     + proyección a 2D/3D)
---   - Controles, filtros y persistencia de estado por superficie
+--   - Tres superficies de visualización: Cartografía, Narrativa, Exploración
+--   - Una portada (IndexLanding) que enruta a las tres superficies
+--   - Fuente de datos: Google Sheets vía gviz, con fallback a JSON local
+--   - Sello formativo del programa (variante elegida en 17_Sello)
 -- Excludes:
---   - Pipeline de cómputo del embedding (caja negra, deferred)
---   - Algoritmo concreto de proyección (caja negra, deferred)
---   - Curaduría manual de la pestaña ProximidadSemantica
---   - Mecanismo de publicación del .xlsx → JSON consumido por el frontend
+--   - Modelo IV (embedding semántico + proyección) — deferred, iteración 1b
+--   - URL state / vistas guardadas — deferred
+--   - Exportación (SVG/PNG/JSON) — deferred
 --   - Autenticación / control de acceso
 -- Dependencies: ninguna externa
+
+
+-- ====================================================================
+-- FUENTE DE DATOS
+-- ====================================================================
+
+external entity GoogleSheet {
+    -- Planilla colaborativa compartida públicamente como "cualquier
+    -- persona con el enlace puede ver". Editada por el equipo del
+    -- doctorado; es la fuente de verdad del modelo de datos.
+    sheet_id: String
+}
+
+entity LocalSnapshot {
+    -- JSON bakeado (mad-map-data.json). Sirve de fallback cuando
+    -- Google Sheets no es accesible. También es la fuente del sello
+    -- que muestra la portada, la cual no hace fetch en vivo.
+    path: String
+}
 
 
 -- ====================================================================
@@ -27,10 +44,8 @@
 -- ====================================================================
 
 external entity User {
-    -- Visitante anónimo. Distintas superficies tienen audiencias
-    -- distintas (público, evaluador CNA, equipo interno) pero el
-    -- spec no autentica: la elección de superficie es la que
-    -- modula qué se ve.
+    -- Visitante anónimo. La elección de superficie modula qué se ve;
+    -- no hay autenticación.
 }
 
 
@@ -42,20 +57,19 @@ entity Linea {
     id: String
     nombre: String
     descripcion: String
-    embedding: EmbeddingVector
+    estado: String
 }
 
 entity Sublinea {
     id: String
     nombre: String
-    descripcion: String
     linea: Linea
     area: Area
-    embedding: EmbeddingVector
+    notas: String?
 }
 
 entity Area {
-    codigo: String          -- ECH, EAA, FCT
+    id: String              -- ECH, EAA, FCT
     nombre: String
     descripcion: String
 }
@@ -82,14 +96,22 @@ entity Investigador {
     id: String
     nombre: String
     area_principal: Area
-    perfil_url: String
-    embedding: EmbeddingVector
+    perfil_url: String?
 }
 
 entity Tema {
     id: String
     investigador: Investigador
     texto: String
+}
+
+entity Sello {
+    foco: String
+    texto: String
+    -- Variante elegida del programa doctoral. Identificada por la
+    -- presencia de "ELEGIDO" en la columna Foco de la pestaña 17_Sello.
+    -- Mostrada como cargador animado mientras las superficies fetchean
+    -- Sheets, y como encabezado identitario en la portada.
 }
 
 
@@ -137,13 +159,15 @@ entity ProximidadSemantica {
     sublinea_a: Sublinea
     sublinea_b: Sublinea
     afinidad: Number        -- valor en 0..1
-    -- Pestaña 18_Proximidad_Tematica del .xlsx. Inferida inicialmente
-    -- desde nombres+descripciones, refinada manualmente por el equipo
-    -- del doctorado. Es la fuente de las aristas tipo (g).
+    estado: activo | DESCARTADO
+    -- Pestaña 18_Proximidad_Tematica del Sheet. Inferida inicialmente
+    -- desde nombres+descripciones, refinada manualmente por el equipo.
+    -- Es la fuente de las aristas tipo (g).
+    -- Las entradas con estado = DESCARTADO se excluyen del grafo.
 }
 
 invariant ProximidadSimetrica {
-    for p in ProximidadSemantica:
+    for p in ProximidadSemantica where p.estado != DESCARTADO:
         exists q in ProximidadSemantica
             where q.sublinea_a = p.sublinea_b
               and q.sublinea_b = p.sublinea_a
@@ -151,35 +175,9 @@ invariant ProximidadSimetrica {
 }
 
 invariant SublineaPerteneceAUnaLinea {
-    for s in Sublineas:
+    for s in Sublinea:
         s.linea != null
 }
-
-
--- ====================================================================
--- ESPACIO SEMÁNTICO (MODELO IV)
--- ====================================================================
-
-value EmbeddingVector {
-    components: List<Number>
-    -- Vector denso del embedding semántico de una entidad nodo.
-}
-
-value Position2D { x: Number, y: Number }
-value Position3D { x: Number, y: Number, z: Number }
-
-deferred SemanticEmbedding.compute
-    -- Pipeline offline. Considera (caja negra):
-    --   - Texto: nombre + descripción de la entidad
-    --   - Estructura: relaciones m:n del modelo
-    --   - Curaduría: matriz ProximidadSemantica una vez afinada
-    -- Se calcula una sola vez al construir el JSON consumido por las
-    -- páginas. El navegador no recalcula embeddings.
-
-deferred ProjectionAlgorithm.project
-    -- Recibe un EmbeddingVector y un número de dimensiones (2 ó 3),
-    -- devuelve Position2D o Position3D. Implementación delega a
-    -- PCA, UMAP o t-SNE según la elección activa en la superficie.
 
 
 -- ====================================================================
@@ -189,11 +187,18 @@ deferred ProjectionAlgorithm.project
 entity Node {
     id: String
     nombre: String
-    embedding: EmbeddingVector
     kind: linea_node | sublinea_node | investigador_node
-    -- Cualquier entidad cuya identidad puede aparecer como punto en
-    -- la visualización. La proyección concreta se computa en cada
-    -- carga de superficie.
+    -- Nodo visual derivado de Linea, Sublinea o Investigador.
+    -- linea_node y sublinea_node se representan como círculos;
+    -- investigador_node como cuadrado.
+    --
+    -- Categorías heredadas (para filtros y envolventes):
+    lineas: Set<Linea>
+    areas: Set<Area>
+    modos: Set<Modo>        -- todos los modos de la línea-madre (predominante + presente)
+    salidas: Set<Salida>
+    labs: Set<Laboratorio>
+    investigadores: Set<Investigador>   -- sólo relevante en sublinea_node
 }
 
 entity Edge {
@@ -201,43 +206,48 @@ entity Edge {
     target: Node
     kind: jerarquica           -- (a) Sublinea -> Linea
         | coautoria            -- (b) Investigador -> Sublinea (vía Tema)
-        | coinvestigacion      -- (c) Sublinea <-> Sublinea (perfiles compartidos)
+        | coinvestigacion      -- (c) Sublinea <-> Sublinea (investigador compartido)
         | sosten_lab           -- (d) Laboratorio -> Linea
-        | afinidad_lab         -- (e) Sublinea <-> Sublinea (mismo Lab)
-        | coincidencia_modo    -- (f) Sublinea <-> Sublinea (mismo Modo)
-        | proximidad_semantica -- (g) Sublinea <-> Sublinea (declarada en ProximidadSemantica)
+        | afinidad_lab         -- (e) Sublinea <-> Sublinea (líneas-madre comparten Lab)
+        | coincidencia_modo    -- (f) Sublinea <-> Sublinea (líneas-madre comparten Modo predominante)
+        | proximidad_semantica -- (g) Sublinea <-> Sublinea (declarada en ProximidadSemantica activa)
+    weight: Number?
 }
 
 entity Envolvente {
     kind: area | modo | salida
     category_id: String
-    -- Región translúcida que rodea visualmente todos los nodos
-    -- visibles que pertenecen a la categoría dada. Si está activa
-    -- pero no hay nodos visibles de su categoría, no se renderiza.
+    -- Convex hull translúcido que agrupa visualmente los nodos visibles
+    -- de una categoría. Requiere al menos 3 nodos visibles para
+    -- renderizarse (convex hull necesita ≥ 3 puntos coplanares).
 }
 
 
 -- ====================================================================
--- CONFIGURACIÓN
+-- MODELO IV (DEFERRED — iteración 1b)
 -- ====================================================================
 
-config {
-    -- Dimensiones por defecto al cargar cada superficie
-    cartografia_default_dimensions: two | three = two
-    narrativa_default_dimensions: two | three = two
-    exploracion_default_dimensions: two | three = two
+-- El MVP actual usa D3 force-directed (Modelo I) como layout.
+-- El Modelo IV (embedding semántico + proyección 2D/3D) está pendiente.
+-- El selector de algoritmo es visible en Exploración pero está deshabilitado.
 
-    -- Algoritmo de proyección
-    cartografia_projection: pca | umap | tsne = umap   -- fijo, no expuesto al usuario
-    narrativa_projection: pca | umap | tsne = umap     -- fijo, no expuesto al usuario
-    exploracion_default_projection: pca | umap | tsne = umap   -- editable
-
-    -- Métrica de tamaño de nodo
-    default_node_size_metric: relations | temas | perfiles = relations
-
-    -- Slider de fuerza de cluster en exploracion
-    default_cluster_strength: Number = 0.5
+value EmbeddingVector {
+    components: List<Number>
 }
+
+value Position2D { x: Number, y: Number }
+value Position3D { x: Number, y: Number, z: Number }
+
+deferred SemanticEmbedding.compute
+    -- Pipeline offline. Considera (caja negra):
+    --   - Texto: nombre + descripción de la entidad
+    --   - Estructura: relaciones m:n del modelo
+    --   - Curaduría: matriz ProximidadSemantica
+
+deferred ProjectionAlgorithm.project
+    -- Recibe un EmbeddingVector y dimensiones (2 ó 3),
+    -- devuelve Position2D o Position3D.
+    -- Implementación a elegir entre PCA, UMAP, t-SNE.
 
 
 -- ====================================================================
@@ -248,13 +258,12 @@ surface IndexLanding {
     facing visitor: User
 
     exposes:
+        sello.foco
+        sello.texto
         for s in {Cartografia, Narrativa, Exploracion}:
             s.title
-            s.description
             s.audience
-        sello_formativo: String
-            -- Texto del sello (variante elegida en hoja 17_Sello del .xlsx)
-            -- mostrado como bajada identitaria del programa.
+            s.description
 
     provides:
         NavigateToCartografia()
@@ -262,9 +271,8 @@ surface IndexLanding {
         NavigateToExploracion()
 
     @guidance
-        -- Página de entrada. Tres tarjetas con el nombre, audiencia y
-        -- una pregunta orientadora por superficie. El sello formativo
-        -- aparece como encabezado.
+        -- El sello se carga desde LocalSnapshot, no desde Sheets en vivo.
+        -- Si el snapshot no está disponible, se muestra un mensaje de error.
 }
 
 surface Cartografia {
@@ -274,7 +282,6 @@ surface Cartografia {
         for n in Nodes where n.kind in {linea_node, sublinea_node} and visible:
             n.id
             n.nombre
-            n.position
         for e in Edges where e.kind in {jerarquica, proximidad_semantica} and visible:
             e.source
             e.target
@@ -282,35 +289,29 @@ surface Cartografia {
         for env in Envolventes where active and has_visible_nodes:
             env.kind
             env.category_id
-        active_dimensions: two | three
         active_envolventes: Set<area | modo | salida>
+        active_edge_kinds: Set<jerarquica | proximidad_semantica>
         search_query: String?
         selected_node: Node?
 
     provides:
-        UserTogglesDimensions()
         UserTogglesEnvolvente(kind: area | modo | salida)
         UserTogglesEdge(kind: jerarquica | proximidad_semantica)
         UserClicksNode(n: Node)
         UserClicksOutsideNode()
-        UserClicksEnvolvente(env: Envolvente)
         UserSearchesText(query: String)
         UserClearsFilters()
 
     @guarantee NoPerfiles
-        -- Esta superficie nunca expone investigadores como nodos,
-        -- independientemente del estado. La capa de perfiles no es
-        -- activable aquí (decisión de prudencia frente al público).
+        -- Esta superficie nunca expone investigadores como nodos.
+        -- La capa de perfiles no es activable aquí.
 
     @guidance
         -- Defaults al cargar:
-        --   active_dimensions = 2
-        --   edges visibles: jerarquica + proximidad_semantica (sólo (a) y (g))
-        --   envolventes activas: {area}
+        --   active_edge_kinds = {jerarquica, proximidad_semantica}
+        --   active_envolventes = {area}
         --   search_query = null
-        --   sin filtros
-        -- Sin selector de algoritmo; sin sliders; sin perfiles; sin
-        -- exportación; sin URL state. Cada visita parte limpia.
+        -- Sin filtros, sin presets, sin perfiles. Cada visita parte limpia.
 }
 
 surface Narrativa {
@@ -321,17 +322,15 @@ surface Narrativa {
             n.id
             n.kind
             n.nombre
-            n.position
-        for e in Edges where e.kind in {jerarquica, coinvestigacion, sosten_lab} and visible:
+        for e in Edges where e.kind in {jerarquica, coautoria, coinvestigacion, sosten_lab} and visible:
             e.source
             e.target
             e.kind
         for env in Envolventes where active and has_visible_nodes:
             env.kind
             env.category_id
-        active_dimensions: two | three
         active_envolventes: Set<area | modo | salida>
-        active_edge_kinds: Set<jerarquica | coinvestigacion | sosten_lab>
+        active_edge_kinds: Set<jerarquica | coautoria | coinvestigacion | sosten_lab>
         show_perfiles: Boolean
         filter_lineas: Set<Linea>
         filter_areas: Set<Area>
@@ -341,9 +340,8 @@ surface Narrativa {
         selected_node: Node?
 
     provides:
-        UserTogglesDimensions()
         UserTogglesEnvolvente(kind: area | modo | salida)
-        UserTogglesEdge(kind: jerarquica | coinvestigacion | sosten_lab)
+        UserTogglesEdge(kind: jerarquica | coautoria | coinvestigacion | sosten_lab)
         UserTogglesPerfiles()
         UserSelectsLineaFilter(linea: Linea)
         UserSelectsAreaFilter(area: Area)
@@ -352,21 +350,16 @@ surface Narrativa {
         UserClicksPresetPerfilesPorArea()
         UserClicksNode(n: Node)
         UserClicksOutsideNode()
-        UserClicksEnvolvente(env: Envolvente)
         UserSearchesText(query: String)
         UserClearsFilters()
 
     @guidance
         -- Defaults al cargar:
-        --   active_dimensions = 2
         --   active_edge_kinds = {jerarquica, coinvestigacion}
         --   active_envolventes = {area}
         --   show_perfiles = false
         --   active_preset = none
-        --   sin filtros
-        -- Sin selector de algoritmo; sin sliders avanzados; sin URL state.
-        -- Dos presets accesibles como botones: "Cobertura por línea" y
-        -- "Perfiles por área".
+        -- Dos presets como botones; filtros de línea, área y modo.
 }
 
 surface Exploracion {
@@ -378,17 +371,13 @@ surface Exploracion {
             n.kind
             n.nombre
             n.descripcion
-            n.position
-            n.size
-        for e in Edges where active_kind and visible:
+        for e in Edges where e.kind in active_edge_kinds and visible:
             e.source
             e.target
             e.kind
         for env in Envolventes where active and has_visible_nodes:
             env.kind
             env.category_id
-        active_dimensions: two | three
-        active_projection: pca | umap | tsne
         active_envolventes: Set<area | modo | salida>
         active_edge_kinds: Set<jerarquica | coautoria | coinvestigacion |
                                 sosten_lab | afinidad_lab |
@@ -400,15 +389,10 @@ surface Exploracion {
         filter_salidas: Set<Salida>
         filter_labs: Set<Laboratorio>
         filter_investigadores: Set<Investigador>
-        cluster_strength: Number              -- 0..1
-        node_size_metric: relations | temas | perfiles
         search_query: String?
         selected_node: Node?
-        saved_views: List<SavedView>
 
     provides:
-        UserTogglesDimensions()
-        UserSelectsProjection(p: pca | umap | tsne)
         UserTogglesEnvolvente(kind: area | modo | salida)
         UserTogglesEdge(kind: jerarquica | coautoria | coinvestigacion |
                               sosten_lab | afinidad_lab |
@@ -420,35 +404,19 @@ surface Exploracion {
         UserSelectsSalidaFilter(salida: Salida)
         UserSelectsLabFilter(lab: Laboratorio)
         UserSelectsInvestigadorFilter(inv: Investigador)
-        UserAdjustsClusterStrength(value: Number)
-        UserSelectsNodeSizeMetric(metric: relations | temas | perfiles)
         UserClicksNode(n: Node)
         UserClicksOutsideNode()
-        UserClicksEnvolvente(env: Envolvente)
         UserSearchesText(query: String)
         UserClearsFilters()
-        UserExportsView(format: svg | png | json)
-        UserSavesViewAsBookmark(name: String)
-        UserLoadsSavedView(view: SavedView)
 
     @guidance
-        -- Defaults al cargar (cuando la URL no trae state params):
-        --   active_dimensions = 2, active_projection = umap
+        -- Defaults al cargar:
         --   active_edge_kinds = {jerarquica}
         --   active_envolventes = {area}
         --   show_perfiles = false
-        --   node_size_metric = relations
-        --   cluster_strength = 0.5
-        -- Si la URL trae state params, se cargan en lugar de los defaults.
-        -- Estado completo serializable: filtros, toggles, algoritmo,
-        -- sliders, dimensiones, nodo seleccionado.
-}
-
-entity SavedView {
-    name: String
-    serialized_state: String
-    -- Snapshot de un estado de Exploracion guardado por el usuario.
-    -- Se almacena en localStorage; la URL es la fuente de verdad.
+        -- Todos los 7 tipos de arista son toggleables.
+        -- El selector de algoritmo de proyección (UMAP/PCA/t-SNE) está
+        -- presente en los controles pero deshabilitado — pendiente Modelo IV.
 }
 
 
@@ -456,32 +424,17 @@ entity SavedView {
 -- REGLAS DE COMPORTAMIENTO
 -- ====================================================================
 
-rule ProyectarPosicionAlCambiarVistaSemantica {
+rule CargarDatosDesdeSheets {
     when: SurfaceLoad(any_surface)
-    let alg = case any_surface:
-        Cartografia => config.cartografia_projection
-        Narrativa => config.narrativa_projection
-        Exploracion => any_surface.active_projection
-    let dims = any_surface.active_dimensions
-    ensures:
-        for n in Nodes:
-            n.position = ProjectionAlgorithm.project(
-                vector: n.embedding,
-                algorithm: alg,
-                dimensions: dims
-            )
-}
 
-rule RecalcularProyeccionAlCambiarParametros {
-    when: ProjectionParametersChange(surface)
-    -- Cambian dimensions, projection o cluster_strength.
     ensures:
-        for n in Nodes:
-            n.position = ProjectionAlgorithm.project(
-                vector: n.embedding,
-                algorithm: surface.active_projection,
-                dimensions: surface.active_dimensions
-            )
+        if GoogleSheet.accessible:
+            Dataset = MadMapDataLoader.loadFromSheets(config.sheet_id)
+        else:
+            Dataset = LocalSnapshot.load()
+    ensures: LoadingIndicator.shown(
+        text: LocalSnapshot.sello.texto  -- visible mientras Sheets carga
+    )
 }
 
 rule MostrarNodoPorFiltrosYBusqueda {
@@ -490,27 +443,30 @@ rule MostrarNodoPorFiltrosYBusqueda {
     ensures:
         for n in Nodes:
             n.matches_filters = (
-                (surface.filter_lineas.empty
-                    or (n.kind = sublinea_node and n.linea in surface.filter_lineas)) and
-                (surface.filter_areas.empty
-                    or n.area in surface.filter_areas) and
-                (surface.filter_modos.empty
-                    or n.modos.any(m => m in surface.filter_modos)) and
-                (surface.filter_salidas.empty
-                    or n.salidas.any(s => s in surface.filter_salidas)) and
-                (surface.filter_labs.empty
-                    or n.labs.any(l => l in surface.filter_labs))
-            )
-            n.matches_search = (
-                q = "" or
-                n.nombre.lower.contains(q.lower) or
-                n.descripcion.lower.contains(q.lower)
+                (surface.filter_lineas.empty or
+                    n.lineas.any(l => l in surface.filter_lineas)) and
+                (surface.filter_areas.empty or
+                    n.areas.any(a => a in surface.filter_areas)) and
+                (surface.filter_modos.empty or
+                    n.modos.any(m => m in surface.filter_modos)) and
+                (surface.filter_salidas.empty or
+                    n.salidas.any(s => s in surface.filter_salidas)) and
+                (surface.filter_labs.empty or
+                    n.labs.any(l => l in surface.filter_labs)) and
+                (surface.filter_investigadores.empty or
+                    n.investigadores.any(i => i in surface.filter_investigadores))
             )
             n.layer_visible = (
                 n.kind != investigador_node or surface.show_perfiles
             )
             n.visible = n.matches_filters and n.layer_visible
-            n.highlighted = n.visible and n.matches_search and q != ""
+            n.highlighted = n.visible and q != "" and (
+                n.nombre.lower.contains(q.lower) or
+                n.descripcion.lower.contains(q.lower)
+            )
+            n.attenuated = n.visible and q != "" and not n.highlighted
+            -- Nota: búsqueda atenúa pero no oculta nodos. La visibilidad
+            -- depende sólo de filtros y capa de perfiles.
 }
 
 rule MostrarAristaSegunTipoYNodos {
@@ -524,17 +480,14 @@ rule MostrarAristaSegunTipoYNodos {
             )
 }
 
-rule ClickEnvolventeFiltraPorCategoria {
-    when: UserClicksEnvolvente(env)
-    if env.kind = area:
-        ensures: surface.filter_areas = {env.category_id}
-    if env.kind = modo:
-        ensures: surface.filter_modos = {env.category_id}
-    if env.kind = salida:
-        ensures: surface.filter_salidas = {env.category_id}
+rule ActivarCoautoriaAlEncenderPerfiles {
+    when: UserTogglesPerfiles()
+    requires: surface.show_perfiles = true   -- recién activado
+    requires: coautoria in surface.allowedEdges
+    ensures: coautoria in surface.active_edge_kinds
     @guidance
-        -- Atajo de exploración: clicking en una envolvente equivale a
-        -- "ver sólo esta categoría".
+        -- Un investigador sin aristas a su trabajo quedaría flotando sin
+        -- contexto semántico. Encender perfiles activa coautoría.
 }
 
 rule ClickFueraDeNodoCierraPanel {
@@ -547,43 +500,13 @@ rule ClickNodoAbrePanel {
     ensures: surface.selected_node = n
 }
 
-rule SerializarEstadoEnURLSoloEnExploracion {
-    when: ViewStateChanges(surface)
-    requires: surface = Exploracion
-    ensures: BrowserURL.updated(serialized: serialize(surface.state))
-    @guidance
-        -- En Cartografia y Narrativa el estado NO se serializa.
-        -- Compartir URL = compartir vista exacta sólo en Exploracion.
-}
-
-rule CargarEstadoExploracionDesdeURL {
-    when: SurfaceLoad(Exploracion, url)
-    if url.has_state_params:
-        ensures: Exploracion.state = deserialize(url)
-    else:
-        ensures: Exploracion.state = exploracion_defaults()
-}
-
-rule MostrarSpinnerConSelloDuranteCarga {
-    when: SurfaceLoad(any_surface)
-    requires: dataset.not_loaded
-    ensures: LoadingState.created(
-        surface: any_surface,
-        message: dataset.sello_formativo
-    )
-    @guidance
-        -- El sello formativo (variante elegida en 17_Sello del .xlsx)
-        -- se muestra como mensaje de carga.
-}
-
 rule MostrarVacioCuandoFiltrosNoCoinciden {
     when: ViewStateChanges(surface)
     let visible_count = Nodes where n.visible.count
     requires: visible_count = 0
-    ensures: EmptyState.created(
+    ensures: EmptyState.shown(
         surface: surface,
-        message: "Sin coincidencias",
-        action: "Limpiar filtros"
+        action: UserClearsFilters
     )
 }
 
@@ -595,21 +518,21 @@ rule AplicarPresetCoberturaPorLinea {
     ensures: surface.show_perfiles = false
     ensures: surface.active_preset = cobertura_por_linea
     @guidance
-        -- Vista curada que destaca las 4 líneas troncales y sus
-        -- sublíneas como anclas. Las envolventes de área quedan como
-        -- contexto institucional.
+        -- Vista curada que destaca las 4 líneas troncales y sus sublíneas
+        -- como territorio temático. Sin perfiles individuales.
 }
 
 rule AplicarPresetPerfilesPorArea {
     when: UserClicksPresetPerfilesPorArea()
     requires: surface = Narrativa
     ensures: surface.active_envolventes = {area}
-    ensures: surface.active_edge_kinds = {jerarquica, coinvestigacion}
+    ensures: surface.active_edge_kinds = {jerarquica, coinvestigacion, coautoria}
     ensures: surface.show_perfiles = true
     ensures: surface.active_preset = perfiles_por_area
     @guidance
-        -- Vista curada que enciende los perfiles y los agrupa por
-        -- área principal. Útil para mostrar el cuerpo académico.
+        -- Vista curada que enciende perfiles agrupados por área principal.
+        -- Coautoría se activa junto con los perfiles para que cada
+        -- investigador aparezca conectado a sus sublíneas.
 }
 
 
@@ -617,24 +540,12 @@ rule AplicarPresetPerfilesPorArea {
 -- INVARIANTES GLOBALES
 -- ====================================================================
 
-invariant CadaNodoTieneEmbedding {
-    for n in Nodes:
-        n.embedding != null
-}
-
-invariant NodosVisiblesTienenPosicion {
-    for n in Nodes where visible:
-        n.position != null
-}
-
 invariant AristasVisiblesEntreNodosVisibles {
     for e in Edges where visible:
         e.source.visible and e.target.visible
 }
 
 invariant CartografiaSinPerfiles {
-    -- En la superficie pública nunca aparecen investigadores como
-    -- nodos, sin importar el estado de filtros.
     for n in Cartografia.exposed_nodes:
         n.kind != investigador_node
 }
@@ -646,7 +557,24 @@ invariant CartografiaAristasLimitadas {
 
 invariant NarrativaAristasLimitadas {
     for e in Narrativa.exposed_edges:
-        e.kind in {jerarquica, coinvestigacion, sosten_lab}
+        e.kind in {jerarquica, coautoria, coinvestigacion, sosten_lab}
+}
+
+invariant EnvolventeRequiereTresNodos {
+    -- Un convex hull necesita ≥ 3 puntos para definir un polígono.
+    -- Las envolventes activas con menos de 3 nodos visibles no se renderizan.
+    for env in Envolventes where active:
+        env.visible_members.count >= 3 or not env.rendered
+}
+
+invariant SublineaExcluidaSiDescartada {
+    -- Las entradas ProximidadSemantica con estado = DESCARTADO no generan
+    -- aristas de tipo proximidad_semantica en el grafo.
+    for p in ProximidadSemantica where p.estado = DESCARTADO:
+        not exists e in Edges
+            where e.kind = proximidad_semantica
+              and e.source.id = p.sublinea_a.id
+              and e.target.id = p.sublinea_b.id
 }
 
 
@@ -655,19 +583,16 @@ invariant NarrativaAristasLimitadas {
 -- ====================================================================
 
 open question
-    "¿La búsqueda debe buscar también en los Temas declarados (texto crudo) o sólo en nombre + descripción de las entidades nodo?"
+    "¿La búsqueda debe buscar también en notas de sublíneas y en los Temas declarados (texto crudo)? Actualmente sólo busca en nombre y descripcion, y Sublinea tiene 'notas' en vez de 'descripcion', por lo que la búsqueda de descripción sólo funciona en líneas."
 
 open question
-    "¿La pestaña ProximidadSemantica usa afinidad numérica (0..1) o sólo binaria (relacionado / no)? Decisión afecta cómo se incorpora al embedding."
+    "¿La pestaña ProximidadSemantica usa afinidad numérica (0..1) o sólo binaria (relacionado / no)? El código parsea el valor como Number pero el peso de la arista no afecta el layout en el MVP force-directed."
 
 open question
-    "¿Las vistas guardadas en Exploracion son globales (compartidas entre todos los usuarios del equipo) o por usuario? Si son por usuario requiere autenticación, hoy fuera de scope."
+    "Cuando un nodo se atenúa por búsqueda no coincidente, ¿sus aristas se atenúan o desaparecen? El código actual las atenúa (clase CSS 'attenuated') sin ocultarlas."
 
 open question
-    "Cuando un nodo se atenúa por búsqueda no coincidente, ¿sus aristas se atenúan o desaparecen?"
+    "¿Hay un preset en Narrativa para 'huecos del programa' (sublíneas sin perfiles, perfiles sin sublíneas declaradas)?"
 
 open question
-    "¿Hay un cuarto preset en Narrativa para 'huecos del programa' (sublíneas sin perfiles, perfiles sin sublíneas declaradas)?"
-
-open question
-    "¿Las dimensiones 2D/3D son toggle dentro de la misma página o una sub-ruta hermana? El spec asume toggle. Implementación puede confirmar."
+    "La portada (IndexLanding) carga el sello desde el snapshot local, no desde Sheets en vivo. ¿Debería hacer fetch live para mostrar el sello más reciente al editar la planilla?"

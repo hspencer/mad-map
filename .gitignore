@@ -1,3 +1,8 @@
+# Node (screenshots tooling)
+node_modules/
+package.json
+package-lock.json
+
 # Configuración local del editor / IDE
 .claude/
 .vscode/
